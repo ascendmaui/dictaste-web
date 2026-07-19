@@ -127,6 +127,43 @@ final class AppState {
         }
     }
 
+    // MARK: - HUD design preview (--hud-preview)
+
+    func startHUDPreview() {
+        hud = HUDController(appState: self)
+        hud?.show()
+        Task { await runPreviewLoop() }
+    }
+
+    private func runPreviewLoop() async {
+        let sample = "So I was thinking we should move the meeting to Tuesday because the client isn't available on Monday"
+            .split(separator: " ").map(String.init)
+        var t = 0.0
+        while !Task.isCancelled {
+            phase = .recording
+            triggerSource = .toggleTap
+            volatileText = ""
+            levelHistory = []
+            hud?.show()
+            for index in sample.indices {
+                volatileText = sample[0...index].joined(separator: " ")
+                for _ in 0..<4 {
+                    t += 0.31
+                    let level = Float(0.4 + 0.28 * sin(t) + Double.random(in: 0...0.28))
+                    currentLevel = min(1, max(0.05, level))
+                    levelHistory.append(currentLevel)
+                    if levelHistory.count > 28 { levelHistory.removeFirst() }
+                    try? await Task.sleep(for: .milliseconds(70))
+                }
+            }
+            phase = .polishing
+            try? await Task.sleep(for: .seconds(1.4))
+            volatileText = "So I was thinking we should move the meeting to Tuesday, since the client isn't available on Monday."
+            phase = .inserting
+            try? await Task.sleep(for: .seconds(2))
+        }
+    }
+
     // MARK: - Always-on background agent
 
     /// launchd agent: starts the app at login and relaunches it after a crash.

@@ -3,11 +3,18 @@ import SwiftUI
 
 @main
 enum Entry {
+    static var isHUDPreview = false
+
     static func main() {
         if CommandLine.arguments.contains("--transcribe-file") {
             runFileMode()
         } else if CommandLine.arguments.contains("--polish-text") {
             runPolishMode()
+        } else if CommandLine.arguments.contains("--hud-preview") {
+            // Design mode: shows the HUD on a loop with simulated speech,
+            // no hotkeys/mic/agent. Runs alongside the real instance.
+            isHUDPreview = true
+            FlowDictateApp.main()
         } else {
             // Single instance: if FlowDictate is already running (e.g. launchd
             // spawned a second copy at registration), the new one bows out.
@@ -91,6 +98,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     let appState = AppState()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        appState.start()
+        if Entry.isHUDPreview {
+            appState.startHUDPreview()
+        } else {
+            appState.start()
+        }
     }
 }

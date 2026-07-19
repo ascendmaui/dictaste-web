@@ -15,7 +15,7 @@ final class HUDController {
     func show() {
         if panel == nil {
             let panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 500, height: 92),
+                contentRect: NSRect(x: 0, y: 0, width: 520, height: 126),
                 styleMask: [.borderless, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
@@ -27,6 +27,8 @@ final class HUDController {
             panel.hasShadow = false
             panel.ignoresMouseEvents = true
             panel.isReleasedWhenClosed = false
+            // The pill commits to dark glass regardless of system appearance.
+            panel.appearance = NSAppearance(named: .darkAqua)
             panel.contentView = NSHostingView(rootView: HUDView(appState: appState))
             self.panel = panel
         }
@@ -44,7 +46,7 @@ final class HUDController {
         let size = panel.frame.size
         panel.setFrameOrigin(NSPoint(
             x: frame.midX - size.width / 2,
-            y: frame.minY + 26
+            y: frame.minY + 14
         ))
     }
 }
@@ -60,35 +62,55 @@ private let flowGradient = LinearGradient(
     endPoint: .bottomTrailing
 )
 
+private let pillShape = RoundedRectangle(cornerRadius: 24, style: .continuous)
+
 struct HUDView: View {
     var appState: AppState
 
     var body: some View {
+        // Fixed slots — the layout skeleton never reflows between phases,
+        // so phase changes can't smear content across the pill.
         HStack(spacing: 14) {
             leadingIcon
                 .frame(width: 40, height: 40)
             content
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(width: 366, height: 40, alignment: .leading)
         }
-        .font(.system(size: 14, weight: .medium, design: .rounded))
-        .padding(.horizontal, 18)
-        .padding(.vertical, 13)
+        .font(.system(size: 15, weight: .medium))
+        .foregroundStyle(.white.opacity(0.95))
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
         .frame(width: 460)
-        .background(.ultraThinMaterial, in: Capsule())
-        .background(Capsule().fill(Color.black.opacity(0.25)))
+        // Layers back-to-front: blur → dark tint → top sheen → content.
+        .background(pillShape.fill(
+            LinearGradient(
+                stops: [
+                    .init(color: .white.opacity(0.10), location: 0),
+                    .init(color: .white.opacity(0.02), location: 0.45),
+                    .init(color: .clear, location: 1),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        ))
+        .background(pillShape.fill(Color(red: 0.05, green: 0.05, blue: 0.09).opacity(0.62)))
+        .background(.ultraThinMaterial, in: pillShape)
         .overlay(
-            Capsule().strokeBorder(
+            pillShape.strokeBorder(
                 LinearGradient(
-                    colors: [.white.opacity(0.28), .white.opacity(0.04)],
+                    colors: [.white.opacity(0.18), .white.opacity(0.03)],
                     startPoint: .top,
                     endPoint: .bottom
                 ),
                 lineWidth: 1
             )
         )
-        .shadow(color: .black.opacity(0.35), radius: 20, y: 8)
-        .padding(18)
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: appState.phase)
+        // Hard clip: nothing (mid-transition text included) ever renders outside the pill.
+        .clipShape(pillShape)
+        .shadow(color: .black.opacity(0.45), radius: 22, y: 10)
+        .shadow(color: .flowViolet.opacity(0.22), radius: 38, y: 6)
+        .padding(.horizontal, 30)
+        .padding(.vertical, 28)
     }
 
     @ViewBuilder
@@ -118,7 +140,6 @@ struct HUDView: View {
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(.white)
             }
-            .transition(.scale.combined(with: .opacity))
         case .error:
             ZStack {
                 Circle().fill(Color.orange.opacity(0.85))
@@ -140,31 +161,27 @@ struct HUDView: View {
                 if appState.volatileText.isEmpty {
                     Text(appState.triggerSource == .toggleTap
                          ? "Listening — tap ⌥ to stop" : "Listening…")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.white.opacity(0.45))
                         .transition(.opacity)
                 } else {
-                    FlowingTranscriptView(text: appState.volatileText)
+                    FlowingTranscriptView(text: appState.volatileText, width: 268)
                 }
             }
         case .transcribing:
             if appState.volatileText.isEmpty {
-                Text("Transcribing…").foregroundStyle(.secondary)
+                Text("Transcribing…").foregroundStyle(.white.opacity(0.45))
             } else {
-                FlowingTranscriptView(text: appState.volatileText)
+                FlowingTranscriptView(text: appState.volatileText, width: 366)
                     .opacity(0.75)
             }
         case .polishing:
-            HStack(spacing: 8) {
-                Text("Polishing")
-                    .foregroundStyle(flowGradient)
-                    .fontWeight(.semibold)
-                FlowingTranscriptView(text: appState.volatileText)
-                    .opacity(0.6)
-            }
+            Text("Polishing…")
+                .fontWeight(.semibold)
+                .foregroundStyle(flowGradient)
         case .inserting:
-            FlowingTranscriptView(text: appState.volatileText)
+            FlowingTranscriptView(text: appState.volatileText, width: 366)
         case .error(let message):
-            Text(message).foregroundStyle(.secondary)
+            Text(message).foregroundStyle(.white.opacity(0.75))
         }
     }
 }
@@ -222,8 +239,15 @@ struct WaveformView: View {
 
 /// Words appear from the right and, as the line outgrows the pill, older words
 /// slide left and dissolve under the fade — the transcript flows as you speak.
+/// Pure-layout marquee: the word row is pinned to a minimum of the slot width
+/// (so short text sits at the left, past the fade zone), and the outer frame is
+/// trailing-anchored (so once the row outgrows the slot, the newest words stay
+/// visible and older ones flow left out through the fade).
 struct FlowingTranscriptView: View {
     var text: String
+    var width: CGFloat
+
+    private let fadeWidth: CGFloat = 22
 
     private var words: [String] {
         text.split(separator: " ").map(String.init)
@@ -231,28 +255,32 @@ struct FlowingTranscriptView: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            ForEach(Array(words.enumerated()), id: \.offset) { _, word in
+            ForEach(Array(words.enumerated()), id: \.offset) { index, word in
                 Text(word)
+                    .tracking(0.2)
+                    .opacity(index == words.count - 1 ? 1 : 0.72)
                     .transition(.asymmetric(
                         insertion: .move(edge: .trailing).combined(with: .opacity),
                         removal: .opacity
                     ))
             }
         }
+        .padding(.leading, fadeWidth)
+        .frame(minWidth: width, alignment: .leading)
         .fixedSize(horizontal: true, vertical: false)
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        .frame(width: width, alignment: .trailing)
         .clipped()
-        .mask(
+        .mask {
             LinearGradient(
                 stops: [
                     .init(color: .clear, location: 0),
-                    .init(color: .black, location: 0.16),
+                    .init(color: .black, location: fadeWidth / max(width, 1)),
                     .init(color: .black, location: 1),
                 ],
                 startPoint: .leading,
                 endPoint: .trailing
             )
-        )
+        }
         .animation(.spring(response: 0.32, dampingFraction: 0.85), value: words)
     }
 }
