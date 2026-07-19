@@ -11,6 +11,11 @@ targets:
       - path: FlowDictate
         excludes:
           - "Info.plist"
+      - path: Support/com.johnmatveyev.flowdictate.plist
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Library/LaunchAgents
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.johnmatveyev.flowdictate

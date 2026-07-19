@@ -6,23 +6,12 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Image(systemName: "waveform.circle.fill")
-                    .foregroundStyle(.tint)
-                Text("FlowDictate")
-                    .font(.headline)
-                Spacer()
-                statusDot
-            }
-
-            Text(statusLine)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            header
 
             Divider()
 
             if appState.history.isEmpty {
-                Text("Hold the fn 🌐 key — or tap left ⌥ to start/stop — and speak into any text field.")
+                Text("Hold fn 🌐, or tap left ⌥ to start and stop. Esc cancels.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else {
@@ -30,21 +19,23 @@ struct MenuBarView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 ForEach(appState.history.prefix(6)) { record in
-                    Button {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(record.text, forType: .string)
-                    } label: {
-                        Text(record.text)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.primary)
+                    HistoryRow(record: record)
                 }
             }
 
             Divider()
+
+            Toggle("AI Polish", isOn: Binding(
+                get: { appState.polishEnabled },
+                set: { appState.polishEnabled = $0 }
+            ))
+            .toggleStyle(.checkbox)
+            .disabled(!appState.polisher.isAvailable)
+            if let reason = appState.polisher.unavailabilityReason {
+                Text(reason)
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
 
             Toggle("Tap left ⌥ to start/stop", isOn: Binding(
                 get: { appState.optionTapEnabled },
@@ -52,8 +43,13 @@ struct MenuBarView: View {
             ))
             .toggleStyle(.checkbox)
 
-            Toggle("Launch at Login", isOn: launchAtLogin)
-                .toggleStyle(.checkbox)
+            Toggle("Start at login & auto-restart", isOn: Binding(
+                get: { appState.agentEnabled },
+                set: { appState.setAgentEnabled($0) }
+            ))
+            .toggleStyle(.checkbox)
+
+            Divider()
 
             Button("Permissions Setup…") {
                 appState.showOnboarding()
@@ -64,34 +60,82 @@ struct MenuBarView: View {
             }
         }
         .padding(12)
-        .frame(width: 300)
+        .frame(width: 310)
     }
 
-    private var statusDot: some View {
-        Circle()
-            .fill(appState.permissions.allGranted && appState.modelReady ? .green : .orange)
-            .frame(width: 8, height: 8)
+    private var header: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "waveform.circle.fill")
+                .font(.title3)
+                .foregroundStyle(
+                    LinearGradient(colors: [Color(red: 0.32, green: 0.51, blue: 1.0),
+                                            Color(red: 0.72, green: 0.38, blue: 1.0)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+                )
+            Text("FlowDictate")
+                .font(.headline)
+            Spacer()
+            statusChip
+        }
     }
 
-    private var statusLine: String {
-        if !appState.permissions.allGranted { return "Setup needed — open Permissions Setup" }
-        return appState.modelStatus
+    private var statusChip: some View {
+        let (label, color): (String, Color) = {
+            if !appState.permissions.allGranted { return ("Setup needed", .orange) }
+            if !appState.modelReady { return ("Preparing…", .orange) }
+            switch appState.phase {
+            case .recording: return ("Recording", .red)
+            case .transcribing, .polishing: return ("Working…", .blue)
+            default: return ("Ready", .green)
+            }
+        }()
+        return Text(label)
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.18), in: Capsule())
+            .foregroundStyle(color)
     }
+}
 
-    private var launchAtLogin: Binding<Bool> {
-        Binding(
-            get: { SMAppService.mainApp.status == .enabled },
-            set: { enabled in
-                do {
-                    if enabled {
-                        try SMAppService.mainApp.register()
-                    } else {
-                        try SMAppService.mainApp.unregister()
-                    }
-                } catch {
-                    NSLog("Launch at login failed: \(error)")
+private struct HistoryRow: View {
+    let record: DictationRecord
+    @State private var hovering = false
+    @State private var copied = false
+
+    var body: some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(record.text, forType: .string)
+            copied = true
+            Task {
+                try? await Task.sleep(for: .seconds(1))
+                copied = false
+            }
+        } label: {
+            HStack {
+                Text(record.text)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer()
+                if copied {
+                    Image(systemName: "checkmark")
+                        .font(.caption2)
+                        .foregroundStyle(.green)
+                } else if hovering {
+                    Image(systemName: "doc.on.doc")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
-        )
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(hovering ? Color.primary.opacity(0.08) : .clear)
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
     }
 }

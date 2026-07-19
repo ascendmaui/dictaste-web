@@ -11,6 +11,10 @@ final class HotkeyMonitor {
     var onRelease: (() -> Void)?
     var onCancel: (() -> Void)?
     var onToggleTap: (() -> Void)?
+    var onEscape: (() -> Void)?
+    /// Queried synchronously from the tap (main thread) to decide whether to
+    /// swallow the Esc key. True while a dictation is in flight.
+    var isDictationActiveProvider: (() -> Bool)?
 
     private(set) var isActive = false
     private var tap: CFMachPort?
@@ -36,12 +40,11 @@ final class HotkeyMonitor {
             options: .defaultTap,
             eventsOfInterest: mask,
             callback: { _, type, event, refcon in
-                if let refcon {
-                    Unmanaged<HotkeyMonitor>.fromOpaque(refcon)
-                        .takeUnretainedValue()
-                        .handle(type: type, event: event)
-                }
-                return Unmanaged.passUnretained(event)
+                guard let refcon else { return Unmanaged.passUnretained(event) }
+                let consumed = Unmanaged<HotkeyMonitor>.fromOpaque(refcon)
+                    .takeUnretainedValue()
+                    .handle(type: type, event: event)
+                return consumed ? nil : Unmanaged.passUnretained(event)
             },
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else { return }
@@ -53,7 +56,26 @@ final class HotkeyMonitor {
         isActive = true
     }
 
-    private func handle(type: CGEventType, event: CGEvent) {
+    /// Called by the poll timer: re-enables or fully recreates a dead tap
+    /// (e.g. after the system disabled it or Accessibility was re-granted).
+    func ensureHealthy() {
+        guard isActive, let tap else {
+            startIfPossible()
+            return
+        }
+        if !CGEvent.tapIsEnabled(tap: tap) {
+            CGEvent.tapEnable(tap: tap, enable: true)
+            if !CGEvent.tapIsEnabled(tap: tap) {
+                CFMachPortInvalidate(tap)
+                self.tap = nil
+                isActive = false
+                startIfPossible()
+            }
+        }
+    }
+
+    /// Returns true when the event should be swallowed (not passed on).
+    private func handle(type: CGEventType, event: CGEvent) -> Bool {
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
@@ -91,6 +113,13 @@ final class HotkeyMonitor {
             }
         case .keyDown:
             if optionDown { optionTapValid = false }
+            // Esc cancels an in-flight dictation and never reaches the app behind it.
+            if event.getIntegerValueField(.keyboardEventKeycode) == 53,
+               isDictationActiveProvider?() == true {
+                if fnDown { cancelled = true }
+                DispatchQueue.main.async { self.onEscape?() }
+                return true
+            }
             if fnDown && !cancelled {
                 cancelled = true
                 DispatchQueue.main.async { self.onCancel?() }
@@ -100,5 +129,6 @@ final class HotkeyMonitor {
         default:
             break
         }
+        return false
     }
 }

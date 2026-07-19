@@ -1,5 +1,6 @@
 import AppKit
 import Observation
+import ServiceManagement
 import SwiftUI
 
 struct DictationRecord: Codable, Identifiable, Equatable {
@@ -16,6 +17,7 @@ final class AppState {
         case idle
         case recording
         case transcribing
+        case polishing
         case inserting
         case error(String)
     }
@@ -30,14 +32,20 @@ final class AppState {
     var optionTapEnabled: Bool = (UserDefaults.standard.object(forKey: "optionTapEnabled") as? Bool) ?? true {
         didSet { UserDefaults.standard.set(optionTapEnabled, forKey: "optionTapEnabled") }
     }
+    var polishEnabled: Bool = (UserDefaults.standard.object(forKey: "polishEnabled") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(polishEnabled, forKey: "polishEnabled") }
+    }
+    var agentEnabled = false
     var volatileText = ""
     var levelHistory: [Float] = []
+    var currentLevel: Float = 0
     var modelStatus = "Checking speech model…"
     var modelReady = false
     var history: [DictationRecord] = []
 
     let permissions = PermissionsModel()
     let hotkey = HotkeyMonitor()
+    let polisher = TextPolisher()
 
     private let recorder = AudioRecorder()
     private let inserter = TextInserter()
@@ -47,8 +55,11 @@ final class AppState {
     private var pressTime = Date.distantPast
     private var sessionTask: Task<TranscriptionSession, Error>?
     private var dismissTask: Task<Void, Never>?
+    private var backgroundActivity: NSObjectProtocol?
 
     private static let historyKey = "dictationHistory"
+    private static let agentPlistName = "com.johnmatveyev.flowdictate.plist"
+    private static let agentOptOutKey = "backgroundAgentOptOut"
 
     func start() {
         hud = HUDController(appState: self)
@@ -57,6 +68,13 @@ final class AppState {
         if !permissions.allGranted {
             showOnboarding()
         }
+
+        // Never let App Nap idle the hotkey listener.
+        backgroundActivity = ProcessInfo.processInfo.beginActivity(
+            options: [.background, .automaticTerminationDisabled],
+            reason: "Listening for the dictation hotkey"
+        )
+        registerBackgroundAgent()
 
         hotkey.onPress = { [weak self] in self?.beginDictation(source: .holdFn) }
         hotkey.onRelease = { [weak self] in
@@ -68,22 +86,35 @@ final class AppState {
             self.cancelDictation()
         }
         hotkey.onToggleTap = { [weak self] in self?.handleToggleTap() }
+        hotkey.onEscape = { [weak self] in self?.cancelDictation() }
+        hotkey.isDictationActiveProvider = { [weak self] in
+            MainActor.assumeIsolated {
+                switch self?.phase {
+                case .recording, .transcribing, .polishing: return true
+                default: return false
+                }
+            }
+        }
         hotkey.startIfPossible()
 
         recorder.onLevel = { [weak self] level in
             guard let self, self.phase == .recording else { return }
+            self.currentLevel = level
             self.levelHistory.append(level)
             if self.levelHistory.count > 28 { self.levelHistory.removeFirst() }
         }
 
-        // Keep permission state fresh; arm the hotkey tap as soon as Accessibility lands.
+        // Keep permission state fresh and the event tap alive.
         pollTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
                 self.permissions.refresh()
-                if self.permissions.axGranted { self.hotkey.startIfPossible() }
+                if self.permissions.axGranted { self.hotkey.ensureHealthy() }
+                self.agentEnabled = SMAppService.agent(plistName: Self.agentPlistName).status == .enabled
             }
         }
+
+        polisher.prewarm()
 
         Task {
             do {
@@ -94,6 +125,35 @@ final class AppState {
                 modelStatus = "Speech model failed: \(error.localizedDescription)"
             }
         }
+    }
+
+    // MARK: - Always-on background agent
+
+    /// launchd agent: starts the app at login and relaunches it after a crash.
+    /// Quitting from the menu (clean exit) stays quit until next login.
+    private func registerBackgroundAgent() {
+        // Migrate off the v1 plain login item.
+        if SMAppService.mainApp.status == .enabled {
+            try? SMAppService.mainApp.unregister()
+        }
+        let agent = SMAppService.agent(plistName: Self.agentPlistName)
+        if agent.status != .enabled,
+           UserDefaults.standard.object(forKey: Self.agentOptOutKey) == nil {
+            try? agent.register()
+        }
+        agentEnabled = agent.status == .enabled
+    }
+
+    func setAgentEnabled(_ enabled: Bool) {
+        let agent = SMAppService.agent(plistName: Self.agentPlistName)
+        if enabled {
+            UserDefaults.standard.removeObject(forKey: Self.agentOptOutKey)
+            try? agent.register()
+        } else {
+            UserDefaults.standard.set(true, forKey: Self.agentOptOutKey)
+            try? agent.unregister()
+        }
+        agentEnabled = agent.status == .enabled
     }
 
     // MARK: - Dictation lifecycle
@@ -119,6 +179,7 @@ final class AppState {
         phase = .recording
         volatileText = ""
         levelHistory = []
+        currentLevel = 0
         pressTime = Date()
         NSSound(named: "Pop")?.play()
         hud?.show()
@@ -159,16 +220,25 @@ final class AppState {
                 guard let sessionTask else { throw DictationError.noSession }
                 let session = try await sessionTask.value
                 let raw = try await session.finish()
-                let text = TextCleaner.clean(raw)
+                let cleaned = TextCleaner.clean(raw)
                 guard phase == .transcribing else { return }
-                guard !text.isEmpty else {
+                guard !cleaned.isEmpty else {
                     fail("No speech detected")
                     return
                 }
-                volatileText = text
+
+                var finalText = cleaned
+                if polishEnabled, polisher.isAvailable {
+                    phase = .polishing
+                    volatileText = cleaned
+                    finalText = await polisher.polish(cleaned) ?? cleaned
+                    guard phase == .polishing else { return } // Esc while polishing
+                }
+
+                volatileText = finalText
                 phase = .inserting
-                inserter.insert(text + " ")
-                addToHistory(text, duration: duration)
+                inserter.insert(finalText + " ")
+                addToHistory(finalText, duration: duration)
                 dismissTask = Task {
                     try? await Task.sleep(for: .seconds(0.9))
                     guard !Task.isCancelled else { return }
@@ -192,6 +262,7 @@ final class AppState {
         phase = .idle
         volatileText = ""
         levelHistory = []
+        currentLevel = 0
         sessionTask = nil
         hud?.hide()
     }

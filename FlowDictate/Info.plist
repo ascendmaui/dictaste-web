@@ -22,6 +22,10 @@
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>LSMultipleInstancesProhibited</key>
+	<true/>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>FlowDictate needs the microphone to hear your dictation.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

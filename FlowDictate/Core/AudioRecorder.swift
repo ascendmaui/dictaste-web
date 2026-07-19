@@ -5,6 +5,7 @@ final class AudioRecorder {
 
     private var engine: AVAudioEngine?
     private var continuation: AsyncStream<AVAudioPCMBuffer>.Continuation?
+    private var smoothedLevel: Float = 0
 
     /// Starts the mic and returns the capture format plus a stream of PCM buffers.
     /// A fresh engine per session picks up input-device changes automatically.
@@ -20,10 +21,17 @@ final class AudioRecorder {
         let (stream, continuation) = AsyncStream.makeStream(of: AVAudioPCMBuffer.self)
         self.continuation = continuation
 
+        smoothedLevel = 0
         input.installTap(onBus: 0, bufferSize: 2048, format: format) { [weak self] buffer, _ in
             continuation.yield(buffer)
-            let level = AudioRecorder.rmsLevel(buffer)
-            DispatchQueue.main.async { self?.onLevel?(level) }
+            guard let self else { return }
+            let raw = AudioRecorder.rmsLevel(buffer)
+            // Fast attack, slow release — bars jump on speech, fall gently after.
+            self.smoothedLevel = raw > self.smoothedLevel
+                ? self.smoothedLevel * 0.35 + raw * 0.65
+                : self.smoothedLevel * 0.82 + raw * 0.18
+            let level = self.smoothedLevel
+            DispatchQueue.main.async { self.onLevel?(level) }
         }
         engine.prepare()
         try engine.start()
