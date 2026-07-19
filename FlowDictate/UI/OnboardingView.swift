@@ -44,7 +44,7 @@ struct OnboardingView: View {
 
             if appState.permissions.allGranted {
                 Label {
-                    Text("You're all set — hold fn 🌐 and start talking. \(appState.modelStatus).")
+                    Text("You're all set — hold fn 🌐 (or tap left ⌥) and start talking. \(appState.modelStatus).")
                 } icon: {
                     Image(systemName: "checkmark.seal.fill")
                         .foregroundStyle(.green)

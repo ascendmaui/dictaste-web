@@ -61,7 +61,9 @@ struct HUDView: View {
                 Image(systemName: "mic.fill")
                     .foregroundStyle(.red)
                 LevelBarsView(levels: appState.levelHistory)
-                Text(appState.volatileText.isEmpty ? "Listening…" : appState.volatileText)
+                let listeningHint = appState.triggerSource == .toggleTap
+                    ? "Listening… tap ⌥ to stop" : "Listening…"
+                Text(appState.volatileText.isEmpty ? listeningHint : appState.volatileText)
                     .foregroundStyle(appState.volatileText.isEmpty ? .secondary : .primary)
                     .lineLimit(1)
                     .truncationMode(.head)

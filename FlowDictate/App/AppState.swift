@@ -20,7 +20,16 @@ final class AppState {
         case error(String)
     }
 
+    enum TriggerSource {
+        case holdFn   // hold fn to talk, release to insert
+        case toggleTap // tap left ⌥ to start, tap again to stop
+    }
+
     var phase: Phase = .idle
+    var triggerSource: TriggerSource = .holdFn
+    var optionTapEnabled: Bool = (UserDefaults.standard.object(forKey: "optionTapEnabled") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(optionTapEnabled, forKey: "optionTapEnabled") }
+    }
     var volatileText = ""
     var levelHistory: [Float] = []
     var modelStatus = "Checking speech model…"
@@ -49,9 +58,16 @@ final class AppState {
             showOnboarding()
         }
 
-        hotkey.onPress = { [weak self] in self?.beginDictation() }
-        hotkey.onRelease = { [weak self] in self?.endDictation() }
-        hotkey.onCancel = { [weak self] in self?.cancelDictation() }
+        hotkey.onPress = { [weak self] in self?.beginDictation(source: .holdFn) }
+        hotkey.onRelease = { [weak self] in
+            guard let self, self.triggerSource == .holdFn else { return }
+            self.endDictation()
+        }
+        hotkey.onCancel = { [weak self] in
+            guard let self, self.triggerSource == .holdFn else { return }
+            self.cancelDictation()
+        }
+        hotkey.onToggleTap = { [weak self] in self?.handleToggleTap() }
         hotkey.startIfPossible()
 
         recorder.onLevel = { [weak self] level in
@@ -82,11 +98,24 @@ final class AppState {
 
     // MARK: - Dictation lifecycle
 
-    func beginDictation() {
+    private func handleToggleTap() {
+        guard optionTapEnabled else { return }
+        switch phase {
+        case .idle, .inserting:
+            beginDictation(source: .toggleTap)
+        case .recording:
+            endDictation()
+        default:
+            break
+        }
+    }
+
+    func beginDictation(source: TriggerSource) {
         if phase == .inserting { dismissTask?.cancel(); finishCycle() }
         guard phase == .idle else { return }
         guard permissions.micGranted else { showOnboarding(); return }
 
+        triggerSource = source
         phase = .recording
         volatileText = ""
         levelHistory = []

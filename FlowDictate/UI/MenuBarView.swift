@@ -22,7 +22,7 @@ struct MenuBarView: View {
             Divider()
 
             if appState.history.isEmpty {
-                Text("Hold the fn 🌐 key and speak into any text field.")
+                Text("Hold the fn 🌐 key — or tap left ⌥ to start/stop — and speak into any text field.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else {
@@ -45,6 +45,12 @@ struct MenuBarView: View {
             }
 
             Divider()
+
+            Toggle("Tap left ⌥ to start/stop", isOn: Binding(
+                get: { appState.optionTapEnabled },
+                set: { appState.optionTapEnabled = $0 }
+            ))
+            .toggleStyle(.checkbox)
 
             Toggle("Launch at Login", isOn: launchAtLogin)
                 .toggleStyle(.checkbox)
