@@ -46,7 +46,8 @@ final class AudioRecorder {
         continuation = nil
     }
 
-    /// RMS mapped to 0…1 across roughly -50dB…0dB, for the HUD level bars.
+    /// RMS mapped to 0…1 across roughly -55dB…-10dB — tuned so normal speech
+    /// visibly moves the HUD waveform, near-silence stays near zero.
     private static func rmsLevel(_ buffer: AVAudioPCMBuffer) -> Float {
         guard let data = buffer.floatChannelData?[0], buffer.frameLength > 0 else { return 0 }
         let n = Int(buffer.frameLength)
@@ -60,6 +61,6 @@ final class AudioRecorder {
         }
         let rms = sqrt(sum / Float(max(count, 1)))
         let db = 20 * log10(max(rms, 1e-6))
-        return max(0, min(1, (db + 50) / 50))
+        return max(0, min(1, (db + 55) / 45))
     }
 }

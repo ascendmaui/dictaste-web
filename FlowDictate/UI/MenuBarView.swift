@@ -68,8 +68,8 @@ struct MenuBarView: View {
             Image(systemName: "waveform.circle.fill")
                 .font(.title3)
                 .foregroundStyle(
-                    LinearGradient(colors: [Color(red: 0.32, green: 0.51, blue: 1.0),
-                                            Color(red: 0.72, green: 0.38, blue: 1.0)],
+                    LinearGradient(colors: [Color(red: 0.30, green: 0.85, blue: 0.48),
+                                            Color(red: 0.08, green: 0.58, blue: 0.33)],
                                    startPoint: .topLeading, endPoint: .bottomTrailing)
                 )
             Text("FlowDictate")

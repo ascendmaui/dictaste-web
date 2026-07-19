@@ -34,8 +34,8 @@ func draw(size: Int) -> CGImage {
     let gradient = CGGradient(
         colorsSpace: space,
         colors: [
-            CGColor(red: 0.13, green: 0.17, blue: 0.52, alpha: 1),
-            CGColor(red: 0.44, green: 0.25, blue: 0.90, alpha: 1),
+            CGColor(red: 0.03, green: 0.30, blue: 0.18, alpha: 1),
+            CGColor(red: 0.13, green: 0.70, blue: 0.40, alpha: 1),
         ] as CFArray,
         locations: [0, 1]
     )!

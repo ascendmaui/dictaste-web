@@ -52,12 +52,21 @@ final class HUDController {
 }
 
 private extension Color {
-    static let flowBlue = Color(red: 0.32, green: 0.51, blue: 1.0)
-    static let flowViolet = Color(red: 0.72, green: 0.38, blue: 1.0)
+    static let recRed = Color(red: 1.0, green: 0.31, blue: 0.33)
+    static let recRedDeep = Color(red: 0.80, green: 0.10, blue: 0.22)
+    static let readyGreen = Color(red: 0.30, green: 0.85, blue: 0.48)
+    static let readyGreenDeep = Color(red: 0.08, green: 0.58, blue: 0.33)
 }
 
-private let flowGradient = LinearGradient(
-    colors: [.flowBlue, .flowViolet],
+/// Recording = red (mic is live), ready/done = green.
+private let recordGradient = LinearGradient(
+    colors: [.recRed, .recRedDeep],
+    startPoint: .topLeading,
+    endPoint: .bottomTrailing
+)
+
+private let readyGradient = LinearGradient(
+    colors: [.readyGreen, .readyGreenDeep],
     startPoint: .topLeading,
     endPoint: .bottomTrailing
 )
@@ -107,8 +116,7 @@ struct HUDView: View {
         )
         // Hard clip: nothing (mid-transition text included) ever renders outside the pill.
         .clipShape(pillShape)
-        .shadow(color: .black.opacity(0.45), radius: 22, y: 10)
-        .shadow(color: .flowViolet.opacity(0.22), radius: 38, y: 6)
+        .shadow(color: .black.opacity(0.5), radius: 24, y: 10)
         .padding(.horizontal, 30)
         .padding(.vertical, 28)
     }
@@ -122,12 +130,12 @@ struct HUDView: View {
             MicOrbView(level: appState.currentLevel)
         case .transcribing:
             ZStack {
-                Circle().fill(flowGradient.opacity(0.25))
+                Circle().fill(Color.white.opacity(0.12))
                 ProgressView().controlSize(.small)
             }
         case .polishing:
             ZStack {
-                Circle().fill(flowGradient)
+                Circle().fill(readyGradient)
                 Image(systemName: "sparkles")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.white)
@@ -135,7 +143,7 @@ struct HUDView: View {
             }
         case .inserting:
             ZStack {
-                Circle().fill(Color.green.opacity(0.9))
+                Circle().fill(readyGradient)
                 Image(systemName: "checkmark")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(.white)
@@ -177,7 +185,7 @@ struct HUDView: View {
         case .polishing:
             Text("Polishing…")
                 .fontWeight(.semibold)
-                .foregroundStyle(flowGradient)
+                .foregroundStyle(readyGradient)
         case .inserting:
             FlowingTranscriptView(text: appState.volatileText, width: 366)
         case .error(let message):
@@ -194,13 +202,13 @@ struct MicOrbView: View {
         ZStack {
             // Soft outer pulse ring.
             Circle()
-                .stroke(flowGradient.opacity(0.5), lineWidth: 2)
+                .stroke(recordGradient.opacity(0.5), lineWidth: 2)
                 .scaleEffect(1 + CGFloat(level) * 0.55)
                 .opacity(0.9 - Double(level) * 0.6)
             Circle()
-                .fill(flowGradient)
+                .fill(recordGradient)
                 .scaleEffect(1 + CGFloat(level) * 0.14)
-                .shadow(color: .flowViolet.opacity(0.35 + Double(level) * 0.5),
+                .shadow(color: .recRed.opacity(0.35 + Double(level) * 0.5),
                         radius: 6 + CGFloat(level) * 14)
             Image(systemName: "mic.fill")
                 .font(.system(size: 15, weight: .semibold))
@@ -220,12 +228,12 @@ struct WaveformView: View {
         HStack(spacing: 2.5) {
             ForEach(0..<barCount, id: \.self) { index in
                 Capsule()
-                    .fill(flowGradient)
-                    .frame(width: 3, height: max(4, CGFloat(value(at: index)) * 26))
-                    .opacity(0.45 + 0.55 * Double(index) / Double(barCount))
+                    .fill(recordGradient)
+                    .frame(width: 3.5, height: max(4, CGFloat(value(at: index)) * 30))
+                    .opacity(0.5 + 0.5 * Double(index) / Double(barCount))
             }
         }
-        .frame(height: 28)
+        .frame(height: 30)
         .animation(.spring(response: 0.25, dampingFraction: 0.7), value: levels)
     }
 
