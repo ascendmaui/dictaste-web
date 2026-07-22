@@ -64,7 +64,7 @@ enum Entry {
         nonisolated(unsafe) var exitCode: Int32 = 0
         Task.detached {
             let polisher = TextPolisher()
-            let cleaned = TextCleaner.clean(input)
+            let cleaned = VocabularyCorrector.apply(TextCleaner.clean(input))
             if let polished = await polisher.polish(cleaned) {
                 print(polished)
             } else {

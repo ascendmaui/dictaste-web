@@ -51,6 +51,10 @@ struct MenuBarView: View {
 
             Divider()
 
+            Button("Custom Vocabulary…") {
+                appState.showVocabulary()
+            }
+
             Button("Permissions Setup…") {
                 appState.showOnboarding()
             }

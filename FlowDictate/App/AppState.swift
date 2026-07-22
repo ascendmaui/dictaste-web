@@ -51,6 +51,7 @@ final class AppState {
     private let inserter = TextInserter()
     private var hud: HUDController?
     private var onboardingWindow: NSWindow?
+    private var vocabularyWindow: NSWindow?
     private var pollTimer: Timer?
     private var pressTime = Date.distantPast
     private var sessionTask: Task<TranscriptionSession, Error>?
@@ -257,7 +258,7 @@ final class AppState {
                 guard let sessionTask else { throw DictationError.noSession }
                 let session = try await sessionTask.value
                 let raw = try await session.finish()
-                let cleaned = TextCleaner.clean(raw)
+                let cleaned = VocabularyCorrector.apply(TextCleaner.clean(raw))
                 guard phase == .transcribing else { return }
                 guard !cleaned.isEmpty else {
                     fail("No speech detected")
@@ -347,6 +348,24 @@ final class AppState {
             onboardingWindow = window
         }
         onboardingWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func showVocabulary() {
+        if vocabularyWindow == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 480, height: 380),
+                styleMask: [.titled, .closable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "Custom Vocabulary"
+            window.isReleasedWhenClosed = false
+            window.contentView = NSHostingView(rootView: VocabularyView())
+            window.center()
+            vocabularyWindow = window
+        }
+        vocabularyWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 }
