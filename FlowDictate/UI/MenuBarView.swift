@@ -8,6 +8,8 @@ struct MenuBarView: View {
         VStack(alignment: .leading, spacing: 10) {
             header
 
+            usageMeter
+
             Divider()
 
             if appState.history.isEmpty {
@@ -30,12 +32,10 @@ struct MenuBarView: View {
                 set: { appState.polishEnabled = $0 }
             ))
             .toggleStyle(.checkbox)
-            .disabled(!appState.polisher.isAvailable)
-            if let reason = appState.polisher.unavailabilityReason {
-                Text(reason)
-                    .font(.caption2)
-                    .foregroundStyle(.orange)
-            }
+            Text(polishStatusLine)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             Toggle("Tap left ⌥ to start/stop", isOn: Binding(
                 get: { appState.optionTapEnabled },
@@ -51,6 +51,10 @@ struct MenuBarView: View {
 
             Divider()
 
+            Button("Account & AI Polish…") {
+                appState.showAccount()
+            }
+
             Button("Custom Vocabulary…") {
                 appState.showVocabulary()
             }
@@ -64,7 +68,53 @@ struct MenuBarView: View {
             }
         }
         .padding(12)
-        .frame(width: 310)
+        .frame(width: 320)
+        .task {
+            await appState.usage.refreshFromServer()
+        }
+    }
+
+    @ViewBuilder
+    private var usageMeter: some View {
+        let usage = appState.usage
+        if usage.wordsLimit != nil || !CloudPolisher.licenseKey.isEmpty {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack {
+                    Text("AI polish")
+                        .font(.caption.weight(.medium))
+                    Spacer()
+                    Text(usage.meterLabel)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(usage.isAtLimit ? .orange : .secondary)
+                }
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.primary.opacity(0.08))
+                        Capsule()
+                            .fill(meterColor(usage.fraction))
+                            .frame(width: max(4, geo.size.width * usage.fraction))
+                    }
+                }
+                .frame(height: 5)
+                if usage.isAtLimit {
+                    Text("Free limit reached — upgrade to keep polishing, or keep dictating without polish.")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if usage.isNearLimit {
+                    Text("Approaching today's free limit.")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    private func meterColor(_ fraction: Double) -> Color {
+        if fraction >= 1 { return .orange }
+        if fraction >= 0.8 { return Color.orange.opacity(0.85) }
+        return Color(red: 0.18, green: 0.82, blue: 0.42)
     }
 
     private var header: some View {
@@ -83,10 +133,30 @@ struct MenuBarView: View {
         }
     }
 
+    private var polishStatusLine: String {
+        if appState.usage.isAtLimit {
+            return "Polish paused — free word limit reached. Upgrade in Account."
+        }
+        if appState.polisher.isAvailable {
+            return "Using Apple Intelligence (on-device, unlimited)."
+        }
+        if !CloudPolisher.licenseKey.isEmpty, CloudPolisher.preferManagedPro {
+            return "Using managed polish (free 2,000 words/day or Pro)."
+        }
+        if !CloudPolisher.openAIKey.isEmpty {
+            return "Using your OpenAI API key."
+        }
+        if let reason = appState.polisher.unavailabilityReason {
+            return "\(reason). Add a free license key in Account."
+        }
+        return "Sign up free for 2,000 words/day of AI polish, or use Apple Intelligence."
+    }
+
     private var statusChip: some View {
         let (label, color): (String, Color) = {
             if !appState.permissions.allGranted { return ("Setup needed", .orange) }
             if !appState.modelReady { return ("Preparing…", .orange) }
+            if appState.usage.isAtLimit { return ("Limit", .orange) }
             switch appState.phase {
             case .recording: return ("Recording", .red)
             case .transcribing, .polishing: return ("Working…", .blue)

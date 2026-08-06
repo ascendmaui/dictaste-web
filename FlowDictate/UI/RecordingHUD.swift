@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// Floating pill at the bottom-center of the screen. Non-activating, so the
-/// target app keeps keyboard focus the whole time.
+/// Floating bottom-center HUD. Idle = compact green-glow pill; active = expanded bar.
+/// Non-activating so the target app keeps keyboard focus.
 @MainActor
 final class HUDController {
     private var panel: NSPanel?
@@ -14,8 +14,9 @@ final class HUDController {
 
     func show() {
         if panel == nil {
+            // Room for expanded state; content is clear outside the pill.
             let panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 520, height: 126),
+                contentRect: NSRect(x: 0, y: 0, width: 480, height: 140),
                 styleMask: [.borderless, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
@@ -27,7 +28,6 @@ final class HUDController {
             panel.hasShadow = false
             panel.ignoresMouseEvents = true
             panel.isReleasedWhenClosed = false
-            // The pill commits to dark glass regardless of system appearance.
             panel.appearance = NSAppearance(named: .darkAqua)
             panel.contentView = NSHostingView(rootView: HUDView(appState: appState))
             self.panel = panel
@@ -52,13 +52,13 @@ final class HUDController {
 }
 
 private extension Color {
-    static let recRed = Color(red: 1.0, green: 0.31, blue: 0.33)
-    static let recRedDeep = Color(red: 0.80, green: 0.10, blue: 0.22)
-    static let readyGreen = Color(red: 0.30, green: 0.85, blue: 0.48)
-    static let readyGreenDeep = Color(red: 0.08, green: 0.58, blue: 0.33)
+    static let recRed = Color(red: 1.0, green: 0.35, blue: 0.37)
+    static let recRedDeep = Color(red: 0.78, green: 0.12, blue: 0.24)
+    static let readyGreen = Color(red: 0.24, green: 0.89, blue: 0.42)
+    static let readyGreenDeep = Color(red: 0.06, green: 0.55, blue: 0.30)
+    static let glass = Color(red: 0.04, green: 0.07, blue: 0.06)
 }
 
-/// Recording = red (mic is live), ready/done = green.
 private let recordGradient = LinearGradient(
     colors: [.recRed, .recRedDeep],
     startPoint: .topLeading,
@@ -71,54 +71,202 @@ private let readyGradient = LinearGradient(
     endPoint: .bottomTrailing
 )
 
-private let pillShape = RoundedRectangle(cornerRadius: 24, style: .continuous)
+private let pillShape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+private let miniPillShape = Capsule(style: .continuous)
 
 struct HUDView: View {
     var appState: AppState
 
-    var body: some View {
-        // Fixed slots — the layout skeleton never reflows between phases,
-        // so phase changes can't smear content across the pill.
-        HStack(spacing: 14) {
-            leadingIcon
-                .frame(width: 40, height: 40)
-            content
-                .frame(width: 366, height: 40, alignment: .leading)
+    private var isExpanded: Bool {
+        switch appState.phase {
+        case .idle: return false
+        default: return true
         }
-        .font(.system(size: 15, weight: .medium))
-        .foregroundStyle(.white.opacity(0.95))
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
-        .frame(width: 460)
-        // Layers back-to-front: blur → dark tint → top sheen → content.
-        .background(pillShape.fill(
-            LinearGradient(
-                stops: [
-                    .init(color: .white.opacity(0.10), location: 0),
-                    .init(color: .white.opacity(0.02), location: 0.45),
-                    .init(color: .clear, location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        ))
-        .background(pillShape.fill(Color(red: 0.05, green: 0.05, blue: 0.09).opacity(0.62)))
-        .background(.ultraThinMaterial, in: pillShape)
+    }
+
+    /// Accent border glow ships with phase: red / green / orange.
+    private var accentGlow: Color {
+        switch appState.phase {
+        case .recording: return .recRed
+        case .transcribing: return Color.white.opacity(0.55)
+        case .polishing, .inserting: return .readyGreen
+        case .error: return .orange
+        case .idle: return .readyGreen
+        }
+    }
+
+    private var helpText: String {
+        switch appState.phase {
+        case .recording:
+            return appState.triggerSource == .toggleTap
+                ? "Tap ⌥ to stop · Esc cancels"
+                : "Release fn to stop · Esc cancels"
+        case .transcribing:
+            return "Transcribing…"
+        case .polishing:
+            return "AI polishing…"
+        case .inserting:
+            return "Inserted"
+        case .error:
+            return "Try again"
+        case .idle:
+            return "Hold fn 🌐"
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            Group {
+                if isExpanded {
+                    expandedBar
+                        .transition(.asymmetric(
+                            insertion: .scale(scale: 0.55, anchor: .bottom)
+                                .combined(with: .opacity),
+                            removal: .scale(scale: 0.55, anchor: .bottom)
+                                .combined(with: .opacity)
+                        ))
+                } else {
+                    miniPill
+                        .transition(.asymmetric(
+                            insertion: .scale(scale: 1.35, anchor: .bottom)
+                                .combined(with: .opacity),
+                            removal: .scale(scale: 0.6, anchor: .bottom)
+                                .combined(with: .opacity)
+                        ))
+                }
+            }
+            .animation(.spring(response: 0.38, dampingFraction: 0.78), value: isExpanded)
+            .animation(.easeInOut(duration: 0.2), value: appState.phase)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.bottom, 4)
+    }
+
+    // MARK: - Mini idle pill
+
+    private var miniPill: some View {
+        HStack(spacing: 7) {
+            // Soft pulsing green core
+            ZStack {
+                Circle()
+                    .fill(Color.readyGreen.opacity(0.35))
+                    .frame(width: 14, height: 14)
+                    .blur(radius: 3)
+                Circle()
+                    .fill(readyGradient)
+                    .frame(width: 8, height: 8)
+                    .shadow(color: .readyGreen.opacity(0.9), radius: 4)
+            }
+            Image(systemName: "waveform")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color.readyGreen.opacity(0.95))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .background {
+            ZStack {
+                miniPillShape.fill(.ultraThinMaterial)
+                miniPillShape.fill(Color.glass.opacity(0.88))
+                miniPillShape.fill(
+                    LinearGradient(
+                        colors: [
+                            Color.readyGreen.opacity(0.12),
+                            Color.clear,
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+            }
+        }
         .overlay(
-            pillShape.strokeBorder(
+            miniPillShape.strokeBorder(
                 LinearGradient(
-                    colors: [.white.opacity(0.18), .white.opacity(0.03)],
-                    startPoint: .top,
-                    endPoint: .bottom
+                    colors: [
+                        Color.readyGreen.opacity(0.85),
+                        Color.readyGreen.opacity(0.35),
+                        Color.readyGreen.opacity(0.65),
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
                 ),
-                lineWidth: 1
+                lineWidth: 1.2
             )
         )
-        // Hard clip: nothing (mid-transition text included) ever renders outside the pill.
-        .clipShape(pillShape)
-        .shadow(color: .black.opacity(0.5), radius: 24, y: 10)
-        .padding(.horizontal, 30)
-        .padding(.vertical, 28)
+        .clipShape(miniPillShape)
+        .shadow(color: .readyGreen.opacity(0.55), radius: 10, y: 0)
+        .shadow(color: .readyGreen.opacity(0.28), radius: 18, y: 0)
+        .shadow(color: .black.opacity(0.4), radius: 10, y: 4)
+        .modifier(IdleGreenPulse())
+    }
+
+    // MARK: - Expanded active bar
+
+    private var expandedBar: some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 10) {
+                leadingIcon
+                    .frame(width: 32, height: 32)
+                content
+                    .frame(width: 300, height: 32, alignment: .leading)
+            }
+            .font(.system(size: 13, weight: .medium, design: .rounded))
+            .foregroundStyle(.white.opacity(0.96))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(width: 370)
+            .background {
+                ZStack {
+                    pillShape.fill(.ultraThinMaterial)
+                    pillShape.fill(
+                        LinearGradient(
+                            colors: [
+                                Color.glass.opacity(0.8),
+                                Color.glass.opacity(0.94),
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    pillShape.fill(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .white.opacity(0.1), location: 0),
+                                .init(color: .white.opacity(0.02), location: 0.45),
+                                .init(color: .clear, location: 1),
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                }
+            }
+            .overlay(
+                pillShape.strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            accentGlow.opacity(0.65),
+                            accentGlow.opacity(0.2),
+                            accentGlow.opacity(0.4),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1.25
+                )
+            )
+            .clipShape(pillShape)
+            .shadow(color: accentGlow.opacity(0.28), radius: 12, y: 0)
+            .shadow(color: .black.opacity(0.5), radius: 16, y: 8)
+
+            Text(helpText)
+                .font(.system(size: 10.5, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.55))
+                .shadow(color: .black.opacity(0.55), radius: 4, y: 1)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
     }
 
     @ViewBuilder
@@ -130,29 +278,35 @@ struct HUDView: View {
             MicOrbView(level: appState.currentLevel)
         case .transcribing:
             ZStack {
-                Circle().fill(Color.white.opacity(0.12))
-                ProgressView().controlSize(.small)
+                Circle()
+                    .fill(Color.white.opacity(0.08))
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                ProgressView().controlSize(.mini)
             }
         case .polishing:
             ZStack {
-                Circle().fill(readyGradient)
+                Circle()
+                    .fill(readyGradient)
+                    .shadow(color: .readyGreen.opacity(0.4), radius: 6)
                 Image(systemName: "sparkles")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white)
                     .symbolEffect(.variableColor.iterative, isActive: true)
             }
         case .inserting:
             ZStack {
-                Circle().fill(readyGradient)
+                Circle()
+                    .fill(readyGradient)
+                    .shadow(color: .readyGreen.opacity(0.35), radius: 6)
                 Image(systemName: "checkmark")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(.white)
             }
         case .error:
             ZStack {
-                Circle().fill(Color.orange.opacity(0.85))
+                Circle().fill(Color.orange.opacity(0.9))
                 Image(systemName: "exclamationmark")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(.white)
             }
         }
@@ -164,109 +318,144 @@ struct HUDView: View {
         case .idle:
             EmptyView()
         case .recording:
-            HStack(spacing: 12) {
-                WaveformView(levels: appState.levelHistory)
+            HStack(spacing: 8) {
+                WaveformView(levels: appState.levelHistory, live: true)
                 if appState.volatileText.isEmpty {
-                    Text(appState.triggerSource == .toggleTap
-                         ? "Listening — tap ⌥ to stop" : "Listening…")
-                        .foregroundStyle(.white.opacity(0.45))
+                    Text("Listening…")
+                        .foregroundStyle(.white.opacity(0.4))
                         .transition(.opacity)
                 } else {
-                    FlowingTranscriptView(text: appState.volatileText, width: 268)
+                    FlowingTranscriptView(text: appState.volatileText, width: 220)
                 }
             }
         case .transcribing:
             if appState.volatileText.isEmpty {
-                Text("Transcribing…").foregroundStyle(.white.opacity(0.45))
+                Text("Transcribing…").foregroundStyle(.white.opacity(0.4))
             } else {
-                FlowingTranscriptView(text: appState.volatileText, width: 366)
-                    .opacity(0.75)
+                FlowingTranscriptView(text: appState.volatileText, width: 300)
+                    .opacity(0.78)
             }
         case .polishing:
-            Text("Polishing…")
-                .fontWeight(.semibold)
-                .foregroundStyle(readyGradient)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("AI polishing…")
+                    .fontWeight(.semibold)
+                    .foregroundStyle(readyGradient)
+                PolishProgressBar()
+            }
         case .inserting:
-            FlowingTranscriptView(text: appState.volatileText, width: 366)
+            FlowingTranscriptView(text: appState.volatileText, width: 300)
         case .error(let message):
-            Text(message).foregroundStyle(.white.opacity(0.75))
+            Text(message)
+                .lineLimit(1)
+                .foregroundStyle(.white.opacity(0.78))
         }
     }
 }
 
-/// Gradient mic orb that swells and glows with the live input level.
+/// Gentle green glow pulse while idle.
+private struct IdleGreenPulse: ViewModifier {
+    @State private var pulse = false
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(pulse ? 1.04 : 1.0)
+            .opacity(pulse ? 1.0 : 0.92)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
+                    pulse = true
+                }
+            }
+    }
+}
+
 struct MicOrbView: View {
     var level: Float
 
     var body: some View {
         ZStack {
-            // Soft outer pulse ring.
             Circle()
-                .stroke(recordGradient.opacity(0.5), lineWidth: 2)
-                .scaleEffect(1 + CGFloat(level) * 0.55)
-                .opacity(0.9 - Double(level) * 0.6)
+                .stroke(recordGradient.opacity(0.55), lineWidth: 1.5)
+                .scaleEffect(1 + CGFloat(level) * 0.45)
+                .opacity(0.85 - Double(level) * 0.55)
             Circle()
                 .fill(recordGradient)
-                .scaleEffect(1 + CGFloat(level) * 0.14)
-                .shadow(color: .recRed.opacity(0.35 + Double(level) * 0.5),
-                        radius: 6 + CGFloat(level) * 14)
+                .scaleEffect(1 + CGFloat(level) * 0.1)
+                .shadow(color: .recRed.opacity(0.4 + Double(level) * 0.4),
+                        radius: 5 + CGFloat(level) * 8)
             Image(systemName: "mic.fill")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.white)
         }
-        .animation(.spring(response: 0.22, dampingFraction: 0.65), value: level)
+        .animation(.spring(response: 0.2, dampingFraction: 0.65), value: level)
     }
 }
 
-/// Symmetric, vertically centered gradient bars driven by recent levels —
-/// newest sample on the right.
 struct WaveformView: View {
     var levels: [Float]
-    private let barCount = 16
+    var live: Bool = false
+    private let barCount = 12
 
     var body: some View {
-        HStack(spacing: 2.5) {
+        HStack(spacing: 1.5) {
             ForEach(0..<barCount, id: \.self) { index in
                 Capsule()
-                    .fill(recordGradient)
-                    .frame(width: 3.5, height: max(4, CGFloat(value(at: index)) * 30))
-                    .opacity(0.5 + 0.5 * Double(index) / Double(barCount))
+                    .fill(live ? AnyShapeStyle(recordGradient) : AnyShapeStyle(readyGradient))
+                    .frame(width: 2.5, height: max(3, CGFloat(value(at: index)) * 22))
+                    .opacity(0.45 + 0.55 * Double(index) / Double(barCount))
             }
         }
-        .frame(height: 30)
-        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: levels)
+        .frame(height: 22)
+        .animation(.spring(response: 0.2, dampingFraction: 0.72), value: levels)
     }
 
     private func value(at index: Int) -> Float {
         let recent = levels.suffix(barCount)
         let offset = index - (barCount - recent.count)
-        guard offset >= 0 else { return 0 }
-        return Array(recent)[offset]
+        guard offset >= 0 else { return 0.08 }
+        return max(0.08, Array(recent)[offset])
     }
 }
 
-/// Words appear from the right and, as the line outgrows the pill, older words
-/// slide left and dissolve under the fade — the transcript flows as you speak.
-/// Pure-layout marquee: the word row is pinned to a minimum of the slot width
-/// (so short text sits at the left, past the fade zone), and the outer frame is
-/// trailing-anchored (so once the row outgrows the slot, the newest words stay
-/// visible and older ones flow left out through the fade).
+struct PolishProgressBar: View {
+    @State private var phase: CGFloat = 0
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.white.opacity(0.08))
+                Capsule()
+                    .fill(readyGradient)
+                    .frame(width: geo.size.width * 0.4)
+                    .offset(x: phase * (geo.size.width * 0.6))
+                    .shadow(color: .readyGreen.opacity(0.45), radius: 4)
+            }
+        }
+        .frame(height: 3)
+        .clipShape(Capsule())
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                phase = 1
+            }
+        }
+    }
+}
+
 struct FlowingTranscriptView: View {
     var text: String
     var width: CGFloat
 
-    private let fadeWidth: CGFloat = 22
+    private let fadeWidth: CGFloat = 14
 
     private var words: [String] {
         text.split(separator: " ").map(String.init)
     }
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             ForEach(Array(words.enumerated()), id: \.offset) { index, word in
                 Text(word)
-                    .tracking(0.2)
-                    .opacity(index == words.count - 1 ? 1 : 0.72)
+                    .tracking(0.1)
+                    .opacity(index == words.count - 1 ? 1 : 0.68)
                     .transition(.asymmetric(
                         insertion: .move(edge: .trailing).combined(with: .opacity),
                         removal: .opacity
@@ -289,6 +478,6 @@ struct FlowingTranscriptView: View {
                 endPoint: .trailing
             )
         }
-        .animation(.spring(response: 0.32, dampingFraction: 0.85), value: words)
+        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: words)
     }
 }

@@ -42,6 +42,7 @@ final class AppState {
     var modelStatus = "Checking speech model…"
     var modelReady = false
     var history: [DictationRecord] = []
+    var usage = UsageStore.shared
 
     let permissions = PermissionsModel()
     let hotkey = HotkeyMonitor()
@@ -52,6 +53,7 @@ final class AppState {
     private var hud: HUDController?
     private var onboardingWindow: NSWindow?
     private var vocabularyWindow: NSWindow?
+    private var accountWindow: NSWindow?
     private var pollTimer: Timer?
     private var pressTime = Date.distantPast
     private var sessionTask: Task<TranscriptionSession, Error>?
@@ -64,9 +66,12 @@ final class AppState {
 
     func start() {
         hud = HUDController(appState: self)
+        // Always-visible mini pill; expands only while dictating.
+        hud?.show()
         loadHistory()
         permissions.refresh()
-        if !permissions.allGranted {
+        // Only block on mic + accessibility. fn key is optional.
+        if !permissions.requiredGranted {
             showOnboarding()
         }
 
@@ -125,6 +130,10 @@ final class AppState {
             } catch {
                 modelStatus = "Speech model failed: \(error.localizedDescription)"
             }
+        }
+
+        Task {
+            await usage.refreshFromServer()
         }
     }
 
@@ -266,11 +275,24 @@ final class AppState {
                 }
 
                 var finalText = cleaned
-                if polishEnabled, polisher.isAvailable {
-                    phase = .polishing
-                    volatileText = cleaned
-                    finalText = await polisher.polish(cleaned) ?? cleaned
-                    guard phase == .polishing else { return } // Esc while polishing
+                if polishEnabled {
+                    // Managed free-tier hard stop: still insert raw cleaned text
+                    let managedBlocked = usage.isAtLimit
+                        && !CloudPolisher.licenseKey.isEmpty
+                        && CloudPolisher.preferManagedPro
+                        && CloudPolisher.openAIKey.isEmpty
+                        && !polisher.isAvailable
+                    if !managedBlocked {
+                        phase = .polishing
+                        volatileText = cleaned
+                        // Order: Apple Intelligence (on-device, unlimited) → managed / BYO → raw
+                        if polisher.isAvailable, let apple = await polisher.polish(cleaned) {
+                            finalText = apple
+                        } else if let cloud = await CloudPolisher.polish(cleaned) {
+                            finalText = cloud
+                        }
+                        guard phase == .polishing else { return }
+                    }
                 }
 
                 volatileText = finalText
@@ -302,7 +324,8 @@ final class AppState {
         levelHistory = []
         currentLevel = 0
         sessionTask = nil
-        hud?.hide()
+        // Stay visible as the minimized green pill (do not hide).
+        hud?.show()
     }
 
     private func fail(_ message: String) {
@@ -366,6 +389,24 @@ final class AppState {
             vocabularyWindow = window
         }
         vocabularyWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func showAccount() {
+        if accountWindow == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 480, height: 440),
+                styleMask: [.titled, .closable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "Account & AI Polish"
+            window.isReleasedWhenClosed = false
+            window.contentView = NSHostingView(rootView: AccountView())
+            window.center()
+            accountWindow = window
+        }
+        accountWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 }
