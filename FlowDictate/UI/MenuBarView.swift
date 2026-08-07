@@ -51,7 +51,19 @@ struct MenuBarView: View {
 
             Divider()
 
-            Button("Account & AI Polish…") {
+            Button("Highlight-to-speak selection") {
+                appState.startFlowReadFromSelection()
+            }
+            Text("Drag-highlight text → auto-reads · Space pause · Esc stop")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            if appState.phase == .reading {
+                Button("Stop reading") {
+                    appState.stopFlowRead()
+                }
+            }
+
+            Button("Account & Settings…") {
                 appState.showAccount()
             }
 
@@ -63,7 +75,7 @@ struct MenuBarView: View {
                 appState.showOnboarding()
             }
 
-            Button("Quit FlowDictate") {
+            Button("Quit Dictaste") {
                 NSApp.terminate(nil)
             }
         }
@@ -126,7 +138,7 @@ struct MenuBarView: View {
                                             Color(red: 0.08, green: 0.58, blue: 0.33)],
                                    startPoint: .topLeading, endPoint: .bottomTrailing)
                 )
-            Text("FlowDictate")
+            Text("Dictaste")
                 .font(.headline)
             Spacer()
             statusChip

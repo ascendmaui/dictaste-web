@@ -14,11 +14,16 @@ final class UsageStore {
     var lastError: String?
     var quotaExceeded: Bool = false
     var lastFetched: Date?
+    /// Premium Flow Read (managed TTS) characters this period.
+    var ttsCharsUsed: Int = 0
+    var ttsCharsLimit: Int? = nil
 
     private static let usedKey = "usageWordsUsed"
     private static let limitKey = "usageWordsLimit"
     private static let planKey = "usagePlan"
     private static let periodKey = "usagePeriod"
+    private static let ttsUsedKey = "usageTtsCharsUsed"
+    private static let ttsLimitKey = "usageTtsCharsLimit"
     private static let warned80Key = "usageWarned80"
     private static let warned100Key = "usageWarned100"
 
@@ -28,6 +33,8 @@ final class UsageStore {
         wordsLimit = lim
         plan = UserDefaults.standard.string(forKey: Self.planKey) ?? "free"
         period = UserDefaults.standard.string(forKey: Self.periodKey) ?? ""
+        ttsCharsUsed = UserDefaults.standard.integer(forKey: Self.ttsUsedKey)
+        ttsCharsLimit = UserDefaults.standard.object(forKey: Self.ttsLimitKey) as? Int
     }
 
     var fraction: Double {
@@ -48,6 +55,31 @@ final class UsageStore {
             return "\(wordsUsed) / \(limit) words"
         }
         return "Unlimited"
+    }
+
+    var ttsMeterLabel: String {
+        if plan == "dev" { return "BYO / System · unlimited" }
+        if let limit = ttsCharsLimit {
+            return "\(ttsCharsUsed) / \(limit) premium chars"
+        }
+        if plan == "free" { return "System voices free · upgrade for premium" }
+        return "Premium read included"
+    }
+
+    var ttsFraction: Double {
+        guard let limit = ttsCharsLimit, limit > 0 else { return 0 }
+        return min(1, Double(ttsCharsUsed) / Double(limit))
+    }
+
+    func applyTTS(charsUsed: Int, charsLimit: Int?) {
+        ttsCharsUsed = charsUsed
+        ttsCharsLimit = charsLimit
+        UserDefaults.standard.set(ttsCharsUsed, forKey: Self.ttsUsedKey)
+        if let charsLimit {
+            UserDefaults.standard.set(charsLimit, forKey: Self.ttsLimitKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Self.ttsLimitKey)
+        }
     }
 
     var isNearLimit: Bool { fraction >= 0.8 && fraction < 1 }
@@ -98,6 +130,10 @@ final class UsageStore {
             let plan = json["plan"] as? String
             let period = json["usagePeriod"] as? String
             apply(wordsUsed: used, wordsLimit: limit, plan: plan, period: period)
+            applyTTS(
+                charsUsed: json["ttsCharsUsed"] as? Int ?? 0,
+                charsLimit: json["ttsCharsLimit"] as? Int
+            )
             lastFetched = .now
             lastError = nil
             quotaExceeded = false

@@ -19,6 +19,7 @@ final class AppState {
         case transcribing
         case polishing
         case inserting
+        case reading
         case error(String)
     }
 
@@ -47,6 +48,7 @@ final class AppState {
     let permissions = PermissionsModel()
     let hotkey = HotkeyMonitor()
     let polisher = TextPolisher()
+    let flowReader = FlowReader()
 
     private let recorder = AudioRecorder()
     private let inserter = TextInserter()
@@ -59,6 +61,11 @@ final class AppState {
     private var sessionTask: Task<TranscriptionSession, Error>?
     private var dismissTask: Task<Void, Never>?
     private var backgroundActivity: NSObjectProtocol?
+    private var readerWatchTask: Task<Void, Never>?
+    /// Fingerprint of text we already auto-read (avoid re-loop on same highlight).
+    private var lastReadFingerprint: String = ""
+    private var readingEventMonitors: [Any] = []
+    private let selectionMonitor = SelectionMonitor()
 
     private static let historyKey = "dictationHistory"
     private static let agentPlistName = "com.johnmatveyev.flowdictate.plist"
@@ -92,16 +99,26 @@ final class AppState {
             self.cancelDictation()
         }
         hotkey.onToggleTap = { [weak self] in self?.handleToggleTap() }
-        hotkey.onEscape = { [weak self] in self?.cancelDictation() }
+        hotkey.onEscape = { [weak self] in
+            guard let self else { return }
+            if self.phase == .reading {
+                self.stopFlowRead()
+            } else {
+                self.cancelDictation()
+            }
+        }
         hotkey.isDictationActiveProvider = { [weak self] in
             MainActor.assumeIsolated {
                 switch self?.phase {
-                case .recording, .transcribing, .polishing: return true
+                case .recording, .transcribing, .polishing, .reading: return true
                 default: return false
                 }
             }
         }
         hotkey.startIfPossible()
+
+        installReadingKeyMonitors()
+        startSelectionMonitor()
 
         recorder.onLevel = { [weak self] level in
             guard let self, self.phase == .recording else { return }
@@ -114,8 +131,14 @@ final class AppState {
         pollTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
+                let axBefore = self.permissions.axGranted
                 self.permissions.refresh()
-                if self.permissions.axGranted { self.hotkey.ensureHealthy() }
+                if self.permissions.axGranted {
+                    self.hotkey.ensureHealthy()
+                    if !self.selectionMonitor.isRunning {
+                        self.selectionMonitor.start()
+                    }
+                }
                 self.agentEnabled = SMAppService.agent(plistName: Self.agentPlistName).status == .enabled
             }
         }
@@ -217,7 +240,166 @@ final class AppState {
         }
     }
 
+    // MARK: - Highlight-to-speak
+
+    /// Space = play/pause, Esc = cancel (reading mode only).
+    private func installReadingKeyMonitors() {
+        let global = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            Task { @MainActor in
+                _ = self?.handleReadingKey(event)
+            }
+        }
+        let local = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            // Local monitor runs on main; swallow handled keys.
+            var handled = false
+            if Thread.isMainThread {
+                handled = self?.handleReadingKey(event) ?? false
+            }
+            return handled ? nil : event
+        }
+        if let global { readingEventMonitors.append(global) }
+        if let local { readingEventMonitors.append(local) }
+    }
+
+    /// Returns true if the key was handled (should not propagate).
+    @discardableResult
+    private func handleReadingKey(_ event: NSEvent) -> Bool {
+        guard phase == .reading else { return false }
+        // Space without cmd/ctrl/opt → play/pause
+        if event.keyCode == 49,
+           event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
+            flowReader.togglePlayPause()
+            return true
+        }
+        // Esc → cancel + clear + neutral
+        if event.keyCode == 53 {
+            stopFlowRead()
+            return true
+        }
+        return false
+    }
+
+    /// Mouse drag-highlight → capture text → auto-read (no menu, no Notes).
+    private func startSelectionMonitor() {
+        selectionMonitor.onSelection = { [weak self] text in
+            self?.handleAutoSelection(text)
+        }
+        if permissions.axGranted {
+            selectionMonitor.start()
+        }
+        // Also (re)start when AX becomes granted via poll timer path below.
+    }
+
+    private func handleAutoSelection(_ text: String) {
+        flowReader.reloadSettingsFromDefaults()
+        guard flowReader.autoReadEnabled else { return }
+        switch phase {
+        case .recording, .transcribing, .polishing, .inserting:
+            return
+        default:
+            break
+        }
+        // Already reading this exact text
+        if phase == .reading, flowReader.text == text { return }
+        // New drag of different text while reading → switch
+        // Same text after natural finish: SelectionMonitor dedupes until re-drag (resetDedupe on Esc)
+        startFlowRead(text: text)
+    }
+
+    /// Manual trigger from menu (still supported).
+    func startFlowReadFromSelection() {
+        if phase == .recording || phase == .transcribing || phase == .polishing {
+            return
+        }
+        Task { @MainActor in
+            // Prefer live AX; fall back to clipboard steal once.
+            var text = SelectionReader.selectedText()
+            if text == nil || text?.isEmpty == true {
+                text = await SelectionReader.selectedTextViaClipboardSteal()
+            }
+            guard let text, !text.isEmpty else {
+                self.phase = .error("Highlight text with your mouse")
+                self.hud?.show()
+                self.dismissTask?.cancel()
+                self.dismissTask = Task {
+                    try? await Task.sleep(for: .seconds(1.4))
+                    guard !Task.isCancelled else { return }
+                    if case .error = self.phase { self.finishCycle() }
+                }
+                return
+            }
+            self.startFlowRead(text: text)
+        }
+    }
+
+    func startFlowRead(text: String) {
+        dismissTask?.cancel()
+        if phase == .recording { cancelDictation() }
+        lastReadFingerprint = text
+        phase = .reading
+        volatileText = text
+        hud?.show()
+        hud?.setInteractive(true)
+        flowReader.speak(text)
+        readerWatchTask?.cancel()
+        readerWatchTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(200))
+                if self.phase != .reading { break }
+                switch self.flowReader.state {
+                case .idle:
+                    // Finished naturally → neutral mini pill
+                    if !self.flowReader.text.isEmpty {
+                        try? await Task.sleep(for: .milliseconds(300))
+                        if self.phase == .reading, case .idle = self.flowReader.state {
+                            self.finishReadingNeutral()
+                        }
+                    }
+                    return
+                case .error(let msg):
+                    self.phase = .error(msg)
+                    self.hud?.setInteractive(true)
+                    try? await Task.sleep(for: .seconds(2.0))
+                    if case .error = self.phase { self.finishCycle() }
+                    return
+                default:
+                    break
+                }
+            }
+        }
+    }
+
+    /// Esc / stop: cancel audio, clear, back to neutral.
+    func stopFlowRead() {
+        readerWatchTask?.cancel()
+        readerWatchTask = nil
+        flowReader.stop(clearText: true)
+        // Allow re-drag of the same text to read again
+        lastReadFingerprint = ""
+        selectionMonitor.resetDedupe()
+        hud?.setInteractive(false)
+        switch phase {
+        case .reading, .error:
+            finishCycle()
+        default:
+            break
+        }
+    }
+
+    /// Natural end of speech — same neutral state.
+    private func finishReadingNeutral() {
+        readerWatchTask?.cancel()
+        readerWatchTask = nil
+        flowReader.stop(clearText: false)
+        hud?.setInteractive(false)
+        if phase == .reading {
+            finishCycle()
+        }
+    }
+
     func beginDictation(source: TriggerSource) {
+        if phase == .reading { stopFlowRead() }
         if phase == .inserting { dismissTask?.cancel(); finishCycle() }
         guard phase == .idle else { return }
         guard permissions.micGranted else { showOnboarding(); return }
@@ -324,6 +506,7 @@ final class AppState {
         levelHistory = []
         currentLevel = 0
         sessionTask = nil
+        hud?.setInteractive(false)
         // Stay visible as the minimized green pill (do not hide).
         hud?.show()
     }
@@ -364,7 +547,7 @@ final class AppState {
                 backing: .buffered,
                 defer: false
             )
-            window.title = "Set Up FlowDictate"
+            window.title = "Set Up Dictaste"
             window.isReleasedWhenClosed = false
             window.contentView = NSHostingView(rootView: OnboardingView(appState: self))
             window.center()

@@ -8,7 +8,7 @@ struct OnboardingView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Set up FlowDictate")
+                Text("Set up Dictaste")
                     .font(.title.bold())
                 Text("Two required permissions. Then hold fn 🌐 or tap left ⌥ to dictate.")
                     .foregroundStyle(.secondary)
@@ -17,7 +17,7 @@ struct OnboardingView: View {
             stepRow(
                 done: appState.permissions.micGranted,
                 title: "1. Microphone (required)",
-                detail: "So FlowDictate can hear you. Click Grant, then Allow in the system dialog.",
+                detail: "So Dictaste can hear you. Click Grant, then Allow in the system dialog.",
                 buttonTitle: appState.permissions.micGranted ? "Granted" : "Grant Microphone"
             ) {
                 appState.permissions.requestMic()
@@ -26,7 +26,7 @@ struct OnboardingView: View {
             stepRow(
                 done: appState.permissions.axGranted,
                 title: "2. Accessibility (required)",
-                detail: "Lets FlowDictate watch hotkeys and type into the focused field. Turn ON the switch next to FlowDictate, then click “I’ve enabled it” below.",
+                detail: "Lets Dictaste watch hotkeys and type into the focused field. Turn ON the switch next to Dictaste, then click “I’ve enabled it” below.",
                 buttonTitle: "Open Accessibility Settings"
             ) {
                 appState.permissions.requestAccessibility()
@@ -34,7 +34,7 @@ struct OnboardingView: View {
             }
 
             if showRestartHint && !appState.permissions.axGranted {
-                Text("After enabling Accessibility, click “I’ve enabled it”. If it still shows incomplete, quit FlowDictate from the menu bar and reopen it.")
+                Text("After enabling Accessibility, click “I’ve enabled it”. If it still shows incomplete, quit Dictaste from the menu bar and reopen it.")
                     .font(.caption)
                     .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)

@@ -16,7 +16,7 @@ final class HUDController {
         if panel == nil {
             // Room for expanded state; content is clear outside the pill.
             let panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 480, height: 140),
+                contentRect: NSRect(x: 0, y: 0, width: 520, height: 160),
                 styleMask: [.borderless, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
@@ -34,6 +34,11 @@ final class HUDController {
         }
         position()
         panel?.orderFrontRegardless()
+    }
+
+    /// Enable mouse for Flow Read controls (play/pause/stop).
+    func setInteractive(_ on: Bool) {
+        panel?.ignoresMouseEvents = !on
     }
 
     func hide() {
@@ -84,12 +89,15 @@ struct HUDView: View {
         }
     }
 
-    /// Accent border glow ships with phase: red / green / orange.
+    private var isReading: Bool { appState.phase == .reading }
+
+    /// Accent border glow ships with phase: red / green / orange / blue (read).
     private var accentGlow: Color {
         switch appState.phase {
         case .recording: return .recRed
         case .transcribing: return Color.white.opacity(0.55)
         case .polishing, .inserting: return .readyGreen
+        case .reading: return Color(red: 0.45, green: 0.75, blue: 1.0)
         case .error: return .orange
         case .idle: return .readyGreen
         }
@@ -97,6 +105,8 @@ struct HUDView: View {
 
     private var helpText: String {
         switch appState.phase {
+        case .reading:
+            return "Space play/pause · Esc cancel"
         case .recording:
             return appState.triggerSource == .toggleTap
                 ? "Tap ⌥ to stop · Esc cancels"
@@ -118,7 +128,15 @@ struct HUDView: View {
         VStack(spacing: 0) {
             Spacer(minLength: 0)
             Group {
-                if isExpanded {
+                if isReading {
+                    readerBar
+                        .transition(.asymmetric(
+                            insertion: .scale(scale: 0.55, anchor: .bottom)
+                                .combined(with: .opacity),
+                            removal: .scale(scale: 0.55, anchor: .bottom)
+                                .combined(with: .opacity)
+                        ))
+                } else if isExpanded {
                     expandedBar
                         .transition(.asymmetric(
                             insertion: .scale(scale: 0.55, anchor: .bottom)
@@ -141,6 +159,133 @@ struct HUDView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.bottom, 4)
+    }
+
+    // MARK: - Flow Read bar
+
+    private var readerBar: some View {
+        let reader = appState.flowReader
+        return VStack(spacing: 6) {
+            HStack(spacing: 10) {
+                // Play / pause
+                Button {
+                    switch reader.state {
+                    case .playing: reader.pause()
+                    case .paused: reader.resume()
+                    case .loading: break
+                    default: reader.speak(reader.text)
+                    }
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color(red: 0.45, green: 0.75, blue: 1.0),
+                                             Color(red: 0.2, green: 0.45, blue: 0.95)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 32, height: 32)
+                            .shadow(color: Color(red: 0.3, green: 0.6, blue: 1).opacity(0.45), radius: 8)
+                        if case .loading = reader.state {
+                            ProgressView().controlSize(.mini).tint(.white)
+                        } else {
+                            Image(systemName: reader.state == .playing ? "pause.fill" : "play.fill")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(.white)
+                                .offset(x: reader.state == .playing ? 0 : 1)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(reader.activeVoiceName.isEmpty ? "Highlight-to-speak" : reader.activeVoiceName)
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.95))
+                        Spacer()
+                        Text(String(format: "%.1f×", reader.rate))
+                            .font(.system(size: 10, weight: .medium, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.45))
+                    }
+                    // Progress
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.white.opacity(0.1))
+                            Capsule()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color(red: 0.45, green: 0.8, blue: 1),
+                                                 Color(red: 0.25, green: 0.5, blue: 1)],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(width: max(4, geo.size.width * reader.progress))
+                        }
+                    }
+                    .frame(height: 4)
+                    Text(reader.text)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.55))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .frame(maxWidth: 300, alignment: .leading)
+
+                Button {
+                    appState.stopFlowRead()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.7))
+                        .frame(width: 28, height: 28)
+                        .background(Circle().fill(Color.white.opacity(0.1)))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(width: 420)
+            .background {
+                ZStack {
+                    pillShape.fill(.ultraThinMaterial)
+                    pillShape.fill(
+                        LinearGradient(
+                            colors: [Color.glass.opacity(0.8), Color.glass.opacity(0.94)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                }
+            }
+            .overlay(
+                pillShape.strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            accentGlow.opacity(0.7),
+                            accentGlow.opacity(0.25),
+                            accentGlow.opacity(0.5),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1.25
+                )
+            )
+            .clipShape(pillShape)
+            .shadow(color: accentGlow.opacity(0.35), radius: 14, y: 0)
+            .shadow(color: .black.opacity(0.5), radius: 16, y: 8)
+
+            Text(helpText)
+                .font(.system(size: 10.5, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.55))
+                .shadow(color: .black.opacity(0.55), radius: 4, y: 1)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
     }
 
     // MARK: - Mini idle pill
@@ -272,7 +417,7 @@ struct HUDView: View {
     @ViewBuilder
     private var leadingIcon: some View {
         switch appState.phase {
-        case .idle:
+        case .idle, .reading:
             EmptyView()
         case .recording:
             MicOrbView(level: appState.currentLevel)
@@ -315,7 +460,7 @@ struct HUDView: View {
     @ViewBuilder
     private var content: some View {
         switch appState.phase {
-        case .idle:
+        case .idle, .reading:
             EmptyView()
         case .recording:
             HStack(spacing: 8) {

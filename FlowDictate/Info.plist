@@ -11,7 +11,9 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>FlowDictate</string>
+	<string>Dictaste</string>
+	<key>CFBundleDisplayName</key>
+	<string>Dictaste</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -27,9 +29,9 @@
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>FlowDictate needs the microphone to hear your dictation.</string>
+	<string>Dictaste needs the microphone to hear your dictation.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>FlowDictate transcribes your speech on-device to type for you.</string>
+	<string>Dictaste transcribes your speech on-device to type for you.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>
