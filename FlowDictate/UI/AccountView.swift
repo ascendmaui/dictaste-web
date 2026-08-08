@@ -80,14 +80,14 @@ struct AccountView: View {
                     }
                 }
                 .disabled(refreshing || licenseKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                Link("Upgrade / manage plan…", destination: URL(string: "https://flowdictate-web.vercel.app/#pricing")!)
+                Link("Upgrade / manage plan…", destination: URL(string: "https://dictaste.vercel.app/#pricing")!)
             }
 
             Section("License & polish") {
                 SecureField("License key (fd_live_…)", text: $licenseKey)
                     .textFieldStyle(.roundedBorder)
                 Toggle("Prefer managed polish when licensed", isOn: $preferManaged)
-                Link("Open dashboard…", destination: URL(string: "https://flowdictate-web.vercel.app/dashboard")!)
+                Link("Open dashboard…", destination: URL(string: "https://dictaste.vercel.app/dashboard")!)
             }
 
             Section("Highlight-to-speak") {

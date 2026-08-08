@@ -1,6 +1,6 @@
 import Foundation
 
-/// Cloud AI polish: Free BYO OpenAI key, or Pro managed license via FlowDictate API.
+/// Cloud AI polish: Free BYO OpenAI key, or Pro managed license via Dictaste API.
 enum CloudPolisher {
     /// Production API base. Override with UserDefaults key `apiBaseURL` for staging.
     static var apiBaseURL: URL {
@@ -9,7 +9,7 @@ enum CloudPolisher {
             return url
         }
         // Staging / Vercel until custom domain is live
-        return URL(string: "https://flowdictate-web.vercel.app")!
+        return URL(string: "https://dictaste.vercel.app")!
     }
 
     static var openAIKey: String {
