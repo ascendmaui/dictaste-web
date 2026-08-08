@@ -1,8 +1,11 @@
-# Apple Developer setup for FlowDictate (notarized Mac DMG)
+# Apple Developer setup for Dictaste (notarized Mac DMG)
 
 **Cost:** $99/year (Apple Developer Program)  
 **Apple Account:** jmat2019@icloud.com (already on this Mac)  
 **Team today:** Personal free team `L85AF3V872` — **cannot** create Developer ID / notarize until paid Program is active.
+
+**Canonical site:** https://dictaste.vercel.app  
+**Install path after build scripts:** `/Applications/Dictaste.app` · `dist/Dictaste.dmg`
 
 ---
 
@@ -29,14 +32,13 @@ When Active, Xcode → Settings → Accounts should show the team **without** �
 3. Create a CSR on your Mac:
 
 ```bash
-# Creates a CSR in your home directory
 open /System/Library/Frameworks/Security.framework/Versions/A/Resources/Keychain\ Access.app
 ```
 
 In Keychain Access: **Certificate Assistant → Request a Certificate From a Certificate Authority…**
 
 - User Email: your Apple ID email  
-- Common Name: `FlowDictate Developer ID`  
+- Common Name: `Dictaste Developer ID`  
 - Select **Saved to disk**  
 - Save `CertificateSigningRequest.certSigningRequest`
 
@@ -55,14 +57,14 @@ You want a line like:
 **Option (recommended): App Store Connect API key**
 
 1. **https://appstoreconnect.apple.com/access/integrations/api**
-2. Keys → **+** → name `FlowDictateNotary` → Access **Developer** or **Admin**
+2. Keys → **+** → name `DictasteNotary` → Access **Developer** or **Admin**
 3. Download `AuthKey_XXXXXXXX.p8` **once** — store safely (e.g. `~/.appstoreconnect/private_keys/`)
 4. Note **Issuer ID**, **Key ID**, **Team ID**
 
 Then:
 
 ```bash
-xcrun notarytool store-credentials "FlowDictateNotary" \
+xcrun notarytool store-credentials "DictasteNotary" \
   --apple-id "jmat2019@icloud.com" \
   --team-id "YOUR_TEAM_ID" \
   --password "app-specific-password"
@@ -71,7 +73,7 @@ xcrun notarytool store-credentials "FlowDictateNotary" \
 Or with API key:
 
 ```bash
-xcrun notarytool store-credentials "FlowDictateNotary" \
+xcrun notarytool store-credentials "DictasteNotary" \
   --key ~/.appstoreconnect/private_keys/AuthKey_XXXXX.p8 \
   --key-id XXXXX \
   --issuer XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
@@ -85,29 +87,31 @@ https://appleid.apple.com → Sign-In and Security → App-Specific Passwords �
 ## Phase C — Build, sign, notarize DMG
 
 ```bash
-cd /Users/john/Projects/FlowDictate
+cd /Users/john/Projects/FlowDictate   # local folder; product is Dictaste
 
-# 1. Release build (Developer ID will be used by package script)
+# 1. Release build (Developer ID used by package script)
 xcodebuild -project FlowDictate.xcodeproj -scheme FlowDictate \
   -configuration Release -derivedDataPath build \
   CODE_SIGN_IDENTITY="Developer ID Application" \
   DEVELOPMENT_TEAM=YOUR_TEAM_ID \
   CODE_SIGN_STYLE=Manual
 
-# 2. Package + notarize (script uses CODESIGN_IDENTITY + FlowDictateNotary profile)
+# 2. Package + notarize
 export CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
-export NOTARY_PROFILE=FlowDictateNotary
+export NOTARY_PROFILE=DictasteNotary
 ./scripts/package_dmg.sh
 
-# Output: dist/FlowDictate.dmg
+# Output: dist/Dictaste.dmg
+# Or one-shot:
+# ./scripts/release_ready.sh --notarize
 ```
 
 ---
 
 ## Phase D — Host DMG + wire website
 
-1. Upload `dist/FlowDictate.dmg` to a public URL (GitHub Release, Cloudflare R2, S3, Vercel Blob, etc.).
-2. Set on Vercel Production:
+1. Upload `dist/Dictaste.dmg` to a public URL (GitHub Release, Cloudflare R2, S3, Vercel Blob, etc.).
+2. Set on Vercel Production project **dictaste**:
 
 ```bash
 cd /Users/john/Projects/flowdictate-web
@@ -115,7 +119,7 @@ printf 'https://YOUR_PUBLIC_DMG_URL' | npx vercel env add NEXT_PUBLIC_DMG_URL pr
 npx vercel deploy --prod --yes
 ```
 
-3. Confirm **https://flowdictate-web.vercel.app/download** shows a real **Download** button.
+3. Confirm **https://dictaste.vercel.app/download** shows a real **Download for Mac** button after launch time.
 
 ---
 
@@ -128,7 +132,7 @@ On another Mac (or a fresh user account):
 3. Launch — should **not** show “unidentified developer” if notarization stapled correctly  
 
 ```bash
-spctl -a -vv /Applications/FlowDictate.app
+spctl -a -vv /Applications/Dictaste.app
 # expect: accepted, source=Notarized Developer ID
 ```
 
@@ -141,6 +145,6 @@ spctl -a -vv /Applications/FlowDictate.app
 | No Developer ID option | Membership not active / wrong Apple ID |
 | `notarytool` invalid credentials | Re-store credentials; check Team ID |
 | Gatekeeper still blocks | Staple failed — re-run stapler; wait for “Accepted” notarization |
-| Accessibility breaks after reinstall | Re-enable FlowDictate in System Settings → Privacy → Accessibility |
+| Accessibility breaks after reinstall | Re-enable **Dictaste** in System Settings → Privacy → Accessibility |
 
-After Phase D, tell the agent: **“DMG is live at \<url\>”** and we can set `NEXT_PUBLIC_DMG_URL` + final smoke.
+After Phase D, tell the agent: **“DMG is live at \<url\>”** and we set `NEXT_PUBLIC_DMG_URL` + final smoke.

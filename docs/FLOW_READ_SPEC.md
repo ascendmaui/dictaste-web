@@ -1,7 +1,7 @@
 # Flow Read — Product & Technical Spec
 
 ## What it is
-Select text (e.g. a long LLM reply) → the FlowDictate pill transforms into a **reader bar** → Play / Pause reads the text aloud.
+Select text (e.g. a long LLM reply) → the Dictaste pill transforms into a **reader bar** → Play / Pause reads the text aloud.
 
 ## Tiers
 

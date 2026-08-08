@@ -16,7 +16,7 @@ enum Entry {
             isHUDPreview = true
             FlowDictateApp.main()
         } else {
-            // Single instance: if FlowDictate is already running (e.g. launchd
+            // Single instance: if Dictaste is already running (e.g. launchd
             // spawned a second copy at registration), the new one bows out.
             let mine = ProcessInfo.processInfo.processIdentifier
             let others = NSRunningApplication.runningApplications(

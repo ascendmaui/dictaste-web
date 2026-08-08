@@ -1,7 +1,8 @@
-# FlowDictate for Windows — Full Phase-by-Phase Build Plan
+# Dictaste for Windows — Full Phase-by-Phase Build Plan
 
 **Status:** Architecture & plan only (Mac + Flow Read first).  
-**Scope:** Windows desktop client that reuses FlowDictate web auth, licenses, polish API, and (later) Flow Read TTS.  
+**Scope:** Windows desktop client that reuses Dictaste web auth, licenses, polish API, and (later) highlight-to-speak TTS.  
+**Implemented MVP:** `/Users/john/Projects/dictaste-windows` → https://github.com/johnmatveyev-lab/dictaste-windows  
 **Out of scope for now:** Linux, iOS, Android.
 
 ---
