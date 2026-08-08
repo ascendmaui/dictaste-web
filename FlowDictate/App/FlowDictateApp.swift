@@ -27,11 +27,11 @@ enum Entry {
         }
     }
 
-    // Headless pipeline check: FlowDictate --transcribe-file audio.aiff
+    // Headless pipeline check: Dictaste --transcribe-file audio.aiff
     private static func runFileMode() {
         guard let idx = CommandLine.arguments.firstIndex(of: "--transcribe-file"),
               idx + 1 < CommandLine.arguments.count else {
-            FileHandle.standardError.write(Data("usage: FlowDictate --transcribe-file <audio file>\n".utf8))
+            FileHandle.standardError.write(Data("usage: Dictaste --transcribe-file <audio file>\n".utf8))
             exit(2)
         }
         let url = URL(fileURLWithPath: CommandLine.arguments[idx + 1])
@@ -52,11 +52,11 @@ enum Entry {
         exit(exitCode)
     }
 
-    // Headless polish check: FlowDictate --polish-text "um so i was thinking"
+    // Headless polish check: Dictaste --polish-text "um so i was thinking"
     private static func runPolishMode() {
         guard let idx = CommandLine.arguments.firstIndex(of: "--polish-text"),
               idx + 1 < CommandLine.arguments.count else {
-            FileHandle.standardError.write(Data("usage: FlowDictate --polish-text <text>\n".utf8))
+            FileHandle.standardError.write(Data("usage: Dictaste --polish-text <text>\n".utf8))
             exit(2)
         }
         let input = CommandLine.arguments[idx + 1]
