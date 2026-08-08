@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Build a release-ready FlowDictate.app for notarization the moment Apple
+# Build a release-ready Dictaste.app for notarization the moment Apple
 # Developer Program is Active. Does NOT require Developer ID yet — falls back
 # to Apple Development so the binary is always buildable while waiting.
 #
 # After membership is Active:
 #   export CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
 #   export DEVELOPMENT_TEAM=YOUR_TEAM_ID
-#   export NOTARY_PROFILE=FlowDictateNotary
+#   export NOTARY_PROFILE=DictasteNotary
 #   ./scripts/release_ready.sh --notarize
 set -euo pipefail
 
@@ -48,15 +48,15 @@ xcodebuild -project FlowDictate.xcodeproj -scheme FlowDictate \
   CODE_SIGNING_ALLOWED=YES \
   CODE_SIGNING_REQUIRED=YES
 
-APP="$ROOT/build/Build/Products/Release/FlowDictate.app"
-echo "→ Built: $APP"
-codesign -dv --verbose=2 "$APP" 2>&1 | grep -E 'Authority|TeamIdentifier|Identifier|Signature' || true
+APP_BUILT="$ROOT/build/Build/Products/Release/FlowDictate.app"
+echo "→ Built: $APP_BUILT"
+codesign -dv --verbose=2 "$APP_BUILT" 2>&1 | grep -E 'Authority|TeamIdentifier|Identifier|Signature' || true
 
-# Stage a clean copy for packaging
+# Stage a clean copy as Dictaste.app for packaging / installers
 mkdir -p "$ROOT/dist"
-rm -rf "$ROOT/dist/FlowDictate.app"
-ditto "$APP" "$ROOT/dist/FlowDictate.app"
-xattr -cr "$ROOT/dist/FlowDictate.app" 2>/dev/null || true
+rm -rf "$ROOT/dist/Dictaste.app" "$ROOT/dist/FlowDictate.app"
+ditto "$APP_BUILT" "$ROOT/dist/Dictaste.app"
+xattr -cr "$ROOT/dist/Dictaste.app" 2>/dev/null || true
 
 if [[ "$NOTARIZE" -eq 1 ]]; then
   if [[ "$CODESIGN_IDENTITY" != Developer\ ID* ]]; then
@@ -64,24 +64,24 @@ if [[ "$NOTARIZE" -eq 1 ]]; then
     echo "Install it from developer.apple.com after membership is Active, then re-run."
     exit 1
   fi
-  if ! xcrun notarytool history --keychain-profile "${NOTARY_PROFILE:-FlowDictateNotary}" >/dev/null 2>&1; then
+  if ! xcrun notarytool history --keychain-profile "${NOTARY_PROFILE:-DictasteNotary}" >/dev/null 2>&1; then
     echo "ERROR: notarytool profile missing. Create with:"
-    echo "  xcrun notarytool store-credentials FlowDictateNotary --apple-id YOU --team-id TEAM --password APP_SPECIFIC_PASSWORD"
+    echo "  xcrun notarytool store-credentials DictasteNotary --apple-id YOU --team-id TEAM --password APP_SPECIFIC_PASSWORD"
     exit 1
   fi
-  "$ROOT/scripts/package_dmg.sh" "$ROOT/dist/FlowDictate.app" "$ROOT/dist"
+  "$ROOT/scripts/package_dmg.sh" "$ROOT/dist/Dictaste.app" "$ROOT/dist"
 else
   # Ad-hoc DMG for internal testing (not Gatekeeper-clean without notarization)
-  DMG="$ROOT/dist/FlowDictate-unsigned.dmg"
+  DMG="$ROOT/dist/Dictaste-unsigned.dmg"
   rm -f "$DMG"
-  hdiutil create -volname "FlowDictate" -srcfolder "$ROOT/dist/FlowDictate.app" -ov -format UDZO "$DMG"
+  hdiutil create -volname "Dictaste" -srcfolder "$ROOT/dist/Dictaste.app" -ov -format UDZO "$DMG"
   echo "→ Internal DMG (not notarized): $DMG"
   echo ""
   echo "When Apple membership is Active:"
   echo "  1) Create Developer ID Application cert"
-  echo "  2) xcrun notarytool store-credentials FlowDictateNotary …"
+  echo "  2) xcrun notarytool store-credentials DictasteNotary …"
   echo "  3) ./scripts/release_ready.sh --notarize"
-  echo "  4) Host dist/FlowDictate.dmg → NEXT_PUBLIC_DMG_URL on Vercel"
+  echo "  4) Host dist/Dictaste.dmg → NEXT_PUBLIC_DMG_URL on Vercel"
 fi
 
 echo "✓ Release artifacts ready under dist/"
