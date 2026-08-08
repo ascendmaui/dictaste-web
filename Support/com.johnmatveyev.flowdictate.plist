@@ -5,7 +5,7 @@
 	<key>Label</key>
 	<string>com.johnmatveyev.flowdictate</string>
 	<key>BundleProgram</key>
-	<string>Contents/MacOS/FlowDictate</string>
+	<string>Contents/MacOS/Dictaste</string>
 	<key>RunAtLoad</key>
 	<true/>
 	<key>KeepAlive</key>

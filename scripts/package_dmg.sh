@@ -3,11 +3,11 @@
 # Prerequisites:
 #   - Developer ID Application certificate in Keychain
 #   - notarytool credentials (xcrun notarytool store-credentials)
-#   - Release build (target may still output FlowDictate.app — staged as Dictaste.app)
+#   - Release build outputs Dictaste.app (PRODUCT_NAME)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP="${1:-$ROOT/build/Build/Products/Release/FlowDictate.app}"
+APP="${1:-$ROOT/build/Build/Products/Release/Dictaste.app}"
 OUT_DIR="${2:-$ROOT/dist}"
 IDENTITY="${CODESIGN_IDENTITY:-Developer ID Application:}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-DictasteNotary}"

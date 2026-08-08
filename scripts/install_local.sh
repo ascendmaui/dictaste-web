@@ -1,10 +1,10 @@
 #!/bin/bash
 # Install Dictaste to /Applications with a stable Apple Development signature.
-# Build product may still be named FlowDictate.app from the Xcode target; we install as Dictaste.app.
+# PRODUCT_NAME is Dictaste; Xcode target/scheme may still be named FlowDictate.
 # Do NOT ad-hoc re-sign after copy — that breaks Accessibility TCC every rebuild.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP_SRC="$ROOT/build/Build/Products/Release/FlowDictate.app"
+APP_SRC="$ROOT/build/Build/Products/Release/Dictaste.app"
 APP_DST="/Applications/Dictaste.app"
 
 cd "$ROOT"

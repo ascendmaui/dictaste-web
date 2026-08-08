@@ -19,7 +19,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.johnmatveyev.flowdictate
-        PRODUCT_NAME: FlowDictate
+        # User-facing product + executable name (bundle id kept for Accessibility TCC).
+        PRODUCT_NAME: Dictaste
         INFOPLIST_FILE: FlowDictate/Info.plist
         GENERATE_INFOPLIST_FILE: NO
         SWIFT_VERSION: "5.0"

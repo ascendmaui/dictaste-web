@@ -48,11 +48,11 @@ xcodebuild -project FlowDictate.xcodeproj -scheme FlowDictate \
   CODE_SIGNING_ALLOWED=YES \
   CODE_SIGNING_REQUIRED=YES
 
-APP_BUILT="$ROOT/build/Build/Products/Release/FlowDictate.app"
+APP_BUILT="$ROOT/build/Build/Products/Release/Dictaste.app"
 echo "→ Built: $APP_BUILT"
 codesign -dv --verbose=2 "$APP_BUILT" 2>&1 | grep -E 'Authority|TeamIdentifier|Identifier|Signature' || true
 
-# Stage a clean copy as Dictaste.app for packaging / installers
+# Stage a clean copy for packaging / installers
 mkdir -p "$ROOT/dist"
 rm -rf "$ROOT/dist/Dictaste.app" "$ROOT/dist/FlowDictate.app"
 ditto "$APP_BUILT" "$ROOT/dist/Dictaste.app"
