@@ -67,6 +67,15 @@ struct MenuBarView: View {
                 appState.showAccount()
             }
 
+            Button("Clone my voice…") {
+                appState.showAccount()
+                // Sheet is opened from Account settings; user taps “Open voice clone…”
+                // Deep-open: post notification for AccountView to present clone sheet.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    NotificationCenter.default.post(name: .dictasteOpenVoiceClone, object: nil)
+                }
+            }
+
             Button("Custom Vocabulary…") {
                 appState.showVocabulary()
             }

@@ -29,6 +29,8 @@ struct AccountView: View {
         return UserDefaults.standard.bool(forKey: "flowReadAuto")
     }()
     @State private var tester = FlowReader()
+    @State private var showVoiceClone = false
+    @State private var clonedVoices: [ClonedVoice] = VoiceCloneService.loadLocal()
 
     private var systemVoices: [AVSpeechSynthesisVoice] {
         AVSpeechSynthesisVoice.speechVoices()
@@ -107,6 +109,26 @@ struct AccountView: View {
                 voicePicker
             }
 
+            Section("Clone my voice (xAI)") {
+                Text("Record a short script or upload audio, then use your voice for highlight-to-speak via Grok TTS.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Open voice clone…") {
+                    showVoiceClone = true
+                }
+                if !clonedVoices.isEmpty {
+                    Picker("Cloned voice", selection: $grokVoice) {
+                        ForEach(clonedVoices) { v in
+                            Text(v.displayName).tag(v.id)
+                        }
+                    }
+                    Text("Also set Provider to Grok (xAI) above.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section("OpenAI API key") {
                 SecureField("sk-…", text: $openAIKey)
                     .textFieldStyle(.roundedBorder)
@@ -153,8 +175,27 @@ struct AccountView: View {
         }
         .formStyle(.grouped)
         .padding()
-        .frame(width: 520, height: 720)
-        .task { await usage.refreshFromServer() }
+        .frame(width: 520, height: 760)
+        .task {
+            await usage.refreshFromServer()
+            clonedVoices = VoiceCloneService.loadLocal()
+        }
+        .sheet(isPresented: $showVoiceClone, onDismiss: {
+            clonedVoices = VoiceCloneService.loadLocal()
+            if let raw = UserDefaults.standard.string(forKey: "flowReadGrokVoice") {
+                grokVoice = raw
+            }
+            if let raw = UserDefaults.standard.string(forKey: "flowReadProvider"),
+               let p = FlowReader.Provider(rawValue: raw) {
+                provider = p
+            }
+            grokKey = FlowReader.grokKey
+        }) {
+            VoiceCloneView()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .dictasteOpenVoiceClone)) { _ in
+            showVoiceClone = true
+        }
     }
 
     @ViewBuilder
@@ -188,8 +229,14 @@ struct AccountView: View {
                 ForEach(FlowReader.grokVoices, id: \.self) { v in
                     Text(v).tag(v)
                 }
+                if !clonedVoices.isEmpty {
+                    Divider()
+                    ForEach(clonedVoices) { v in
+                        Text(v.displayName).tag(v.id)
+                    }
+                }
             }
-            Text("Requires an xAI API key with Grok TTS access.")
+            Text("Built-in voices or your cloned voice_id. Requires an xAI API key.")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }

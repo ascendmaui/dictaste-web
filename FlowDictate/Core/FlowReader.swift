@@ -115,8 +115,18 @@ final class FlowReader: NSObject, AVSpeechSynthesizerDelegate {
         case .system: return systemVoices.map(\.name)
         case .openai: return Self.openAIVoices
         case .gemini: return Self.geminiVoices
-        case .grok: return Self.grokVoices
+        case .grok:
+            let cloned = VoiceCloneService.loadLocal().map(\.id)
+            return Self.grokVoices + cloned
         }
+    }
+
+    /// Display label for a Grok built-in or cloned voice_id.
+    func grokVoiceLabel(_ id: String) -> String {
+        if let c = VoiceCloneService.loadLocal().first(where: { $0.id == id }) {
+            return c.displayName
+        }
+        return id.capitalized
     }
 
     // MARK: - API keys (shared prefs)
@@ -455,7 +465,7 @@ final class FlowReader: NSObject, AVSpeechSynthesizerDelegate {
         }
     }
 
-    // MARK: - Grok (xAI)
+    // MARK: - Grok (xAI) — built-in + custom cloned voices
 
     private func speakGrok(_ text: String) async {
         let apiKey = Self.grokKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -463,59 +473,70 @@ final class FlowReader: NSObject, AVSpeechSynthesizerDelegate {
             state = .error("Add a Grok (xAI) API key in Settings")
             return
         }
-        activeVoiceName = "Grok · \(grokVoice)"
-        // OpenAI-compatible speech endpoint on xAI
-        var request = URLRequest(url: URL(string: "https://api.x.ai/v1/audio/speech")!)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.timeoutInterval = 60
-        let body: [String: Any] = [
-            "model": "grok-tts",
-            "input": text,
-            "voice": grokVoice.lowercased(),
-            "speed": rate,
-            "response_format": "mp3",
-        ]
-        do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse else {
-                state = .error("Network error")
+        let voiceId = grokVoice.trimmingCharacters(in: .whitespacesAndNewlines)
+        let builtIn = Set(Self.grokVoices.map { $0.lowercased() })
+        let isCloned = VoiceCloneService.loadLocal().contains(where: { $0.id == voiceId })
+            || (voiceId.count >= 6 && !builtIn.contains(voiceId.lowercased()))
+        activeVoiceName = isCloned ? "My voice · \(voiceId)" : "Grok · \(voiceId)"
+
+        // Primary: documented TTS endpoint with voice_id
+        if let data = try? await grokTTS(text: text, apiKey: apiKey, voiceId: voiceId, useV1TTS: true) {
+            do {
+                try playAudioData(data)
+                return
+            } catch { /* try alternate */ }
+        }
+        // Fallback: OpenAI-compatible speech path
+        if let data = try? await grokTTS(text: text, apiKey: apiKey, voiceId: voiceId, useV1TTS: false) {
+            do {
+                try playAudioData(data)
+                return
+            } catch {
+                if !Task.isCancelled { state = .error(error.localizedDescription) }
                 return
             }
-            if !(200...299).contains(http.statusCode) {
-                // Try alternate model id
-                if let retry = try? await speakGrokAlternate(text: text, apiKey: apiKey) {
-                    try playAudioData(retry)
-                    return
-                }
-                let err = String(data: data, encoding: .utf8) ?? ""
-                state = .error("Grok TTS failed (\(http.statusCode)) — \(err.prefix(80))")
-                return
-            }
-            try playAudioData(data)
-        } catch {
-            if !Task.isCancelled { state = .error(error.localizedDescription) }
+        }
+        if !Task.isCancelled {
+            state = .error("Grok TTS failed — check API key and voice id")
         }
     }
 
-    private func speakGrokAlternate(text: String, apiKey: String) async throws -> Data? {
-        var request = URLRequest(url: URL(string: "https://api.x.ai/v1/audio/speech")!)
+    private func grokTTS(text: String, apiKey: String, voiceId: String, useV1TTS: Bool) async throws -> Data? {
+        let url = useV1TTS
+            ? URL(string: "https://api.x.ai/v1/tts")!
+            : URL(string: "https://api.x.ai/v1/audio/speech")!
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 60
-        let body: [String: Any] = [
-            "model": "xai.grok-tts",
-            "input": text,
-            "voice": grokVoice,
-            "response_format": "mp3",
-        ]
+        let body: [String: Any]
+        if useV1TTS {
+            body = [
+                "text": text,
+                "voice_id": voiceId.lowercased(),
+                "language": "en",
+            ]
+        } else {
+            body = [
+                "model": "grok-tts",
+                "input": text,
+                "voice": voiceId.lowercased(),
+                "speed": rate,
+                "response_format": "mp3",
+            ]
+        }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
             return nil
+        }
+        // /v1/tts may return raw audio or JSON envelope with base64
+        if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let b64 = obj["audio"] as? String ?? obj["audio_base64"] as? String,
+               let decoded = Data(base64Encoded: b64) {
+                return decoded
+            }
         }
         return data
     }
