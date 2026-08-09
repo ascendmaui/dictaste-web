@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct OnboardingView: View {
-    var appState: AppState
+    @ObservedObject var appState: AppState
     private let refresh = Timer.publish(every: 0.8, on: .main, in: .common).autoconnect()
     @State private var showRestartHint = false
 

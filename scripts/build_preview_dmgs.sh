@@ -22,7 +22,7 @@ build_arch() {
   local arch="$1"
   local label="$2"
   local derived="$ROOT/build/DerivedData-$arch"
-  echo "→ Building $label ($arch) · deployment 14.0+"
+  echo "→ Building $label ($arch) · deployment 13.0+"
   rm -rf "$derived"
   xcodebuild \
     -project FlowDictate.xcodeproj \
@@ -31,7 +31,7 @@ build_arch() {
     -derivedDataPath "$derived" \
     ARCHS="$arch" \
     ONLY_ACTIVE_ARCH=NO \
-    MACOSX_DEPLOYMENT_TARGET=14.0 \
+    MACOSX_DEPLOYMENT_TARGET=13.0 \
     CODE_SIGN_IDENTITY="$IDENTITY" \
     DEVELOPMENT_TEAM="$TEAM" \
     CODE_SIGN_STYLE=Manual \

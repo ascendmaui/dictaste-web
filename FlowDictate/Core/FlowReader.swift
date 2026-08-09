@@ -5,8 +5,7 @@ import Foundation
 
 /// Flow Read — auto-speak selected text via System / OpenAI / Gemini / Grok voices.
 @MainActor
-@Observable
-final class FlowReader: NSObject, AVSpeechSynthesizerDelegate {
+final class FlowReader: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     enum Provider: String, CaseIterable, Identifiable, Hashable {
         case system
         case openai
@@ -40,12 +39,12 @@ final class FlowReader: NSObject, AVSpeechSynthesizerDelegate {
         case fail(String)
     }
 
-    var state: State = .idle
-    var text: String = ""
-    var progress: Double = 0
-    var activeVoiceName: String = ""
+    @Published var state: State = .idle
+    @Published var text: String = ""
+    @Published var progress: Double = 0
+    @Published var activeVoiceName: String = ""
 
-    var provider: Provider = {
+    @Published var provider: Provider = {
         if let raw = UserDefaults.standard.string(forKey: "flowReadProvider"),
            let p = Provider(rawValue: raw) { return p }
         return .system
@@ -53,37 +52,37 @@ final class FlowReader: NSObject, AVSpeechSynthesizerDelegate {
         didSet { UserDefaults.standard.set(provider.rawValue, forKey: "flowReadProvider") }
     }
 
-    var rate: Double = {
+    @Published var rate: Double = {
         let v = UserDefaults.standard.double(forKey: "flowReadRate")
         return v > 0 ? min(2, max(0.5, v)) : 1.0
     }() {
         didSet { UserDefaults.standard.set(rate, forKey: "flowReadRate") }
     }
 
-    var systemVoiceIdentifier: String = UserDefaults.standard.string(forKey: "flowReadSystemVoice") ?? "" {
+    @Published var systemVoiceIdentifier: String = UserDefaults.standard.string(forKey: "flowReadSystemVoice") ?? "" {
         didSet { UserDefaults.standard.set(systemVoiceIdentifier, forKey: "flowReadSystemVoice") }
     }
-    var openAIVoice: String = UserDefaults.standard.string(forKey: "flowReadOpenAIVoice") ?? "nova" {
+    @Published var openAIVoice: String = UserDefaults.standard.string(forKey: "flowReadOpenAIVoice") ?? "nova" {
         didSet { UserDefaults.standard.set(openAIVoice, forKey: "flowReadOpenAIVoice") }
     }
-    var geminiVoice: String = UserDefaults.standard.string(forKey: "flowReadGeminiVoice") ?? "Kore" {
+    @Published var geminiVoice: String = UserDefaults.standard.string(forKey: "flowReadGeminiVoice") ?? "Kore" {
         didSet { UserDefaults.standard.set(geminiVoice, forKey: "flowReadGeminiVoice") }
     }
-    var grokVoice: String = UserDefaults.standard.string(forKey: "flowReadGrokVoice") ?? "Ara" {
+    @Published var grokVoice: String = UserDefaults.standard.string(forKey: "flowReadGrokVoice") ?? "Ara" {
         didSet { UserDefaults.standard.set(grokVoice, forKey: "flowReadGrokVoice") }
     }
 
     /// Auto-read when text is selected (default on).
-    var autoReadEnabled: Bool = {
+    @Published var autoReadEnabled: Bool = {
         if UserDefaults.standard.object(forKey: "flowReadAuto") == nil { return true }
         return UserDefaults.standard.bool(forKey: "flowReadAuto")
     }() {
         didSet { UserDefaults.standard.set(autoReadEnabled, forKey: "flowReadAuto") }
     }
 
-    var openAIKeyStatus: KeyTestStatus = .untested
-    var geminiKeyStatus: KeyTestStatus = .untested
-    var grokKeyStatus: KeyTestStatus = .untested
+    @Published var openAIKeyStatus: KeyTestStatus = .untested
+    @Published var geminiKeyStatus: KeyTestStatus = .untested
+    @Published var grokKeyStatus: KeyTestStatus = .untested
 
     static let openAIVoices = ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer"]
     static let geminiVoices = [

@@ -80,7 +80,7 @@ protocol TranscriptionSessionImpl: AnyObject {
     func cancel()
 }
 
-// MARK: - Legacy (macOS 14+)
+// MARK: - Legacy (macOS 13+)
 
 final class LegacyTranscriptionSession: TranscriptionSessionImpl {
     private let request: SFSpeechAudioBufferRecognitionRequest

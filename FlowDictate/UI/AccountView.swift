@@ -9,7 +9,7 @@ struct AccountView: View {
     @State private var preferManaged = CloudPolisher.preferManagedPro
     @State private var saved = false
     @State private var refreshing = false
-    private var usage = UsageStore.shared
+    @ObservedObject private var usage = UsageStore.shared
     /// Settings mirror — persists via UserDefaults keys shared with live FlowReader.
     @State private var provider: FlowReader.Provider = {
         if let raw = UserDefaults.standard.string(forKey: "flowReadProvider"),

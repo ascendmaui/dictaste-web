@@ -2,7 +2,7 @@ import ServiceManagement
 import SwiftUI
 
 struct MenuBarView: View {
-    var appState: AppState
+    @ObservedObject var appState: AppState
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {

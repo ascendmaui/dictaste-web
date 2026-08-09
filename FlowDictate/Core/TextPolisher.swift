@@ -2,7 +2,7 @@ import Foundation
 
 /// Rewrites raw dictation into clean written text.
 /// Uses Apple Intelligence on macOS 26+ when available; otherwise returns nil
-/// so the caller uses cloud polish / basic cleanup (works on macOS 14+).
+/// so the caller uses cloud polish / basic cleanup (works on macOS 13+).
 final class TextPolisher {
     private let backend: any TextPolisherBackend
 

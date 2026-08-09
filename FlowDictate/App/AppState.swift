@@ -1,5 +1,4 @@
 import AppKit
-import Observation
 import ServiceManagement
 import SwiftUI
 
@@ -11,8 +10,7 @@ struct DictationRecord: Codable, Identifiable, Equatable {
 }
 
 @MainActor
-@Observable
-final class AppState {
+final class AppState: ObservableObject {
     enum Phase: Equatable {
         case idle
         case recording
@@ -28,21 +26,21 @@ final class AppState {
         case toggleTap // tap left ⌥ to start, tap again to stop
     }
 
-    var phase: Phase = .idle
-    var triggerSource: TriggerSource = .holdFn
-    var optionTapEnabled: Bool = (UserDefaults.standard.object(forKey: "optionTapEnabled") as? Bool) ?? true {
+    @Published var phase: Phase = .idle
+    @Published var triggerSource: TriggerSource = .holdFn
+    @Published var optionTapEnabled: Bool = (UserDefaults.standard.object(forKey: "optionTapEnabled") as? Bool) ?? true {
         didSet { UserDefaults.standard.set(optionTapEnabled, forKey: "optionTapEnabled") }
     }
-    var polishEnabled: Bool = (UserDefaults.standard.object(forKey: "polishEnabled") as? Bool) ?? true {
+    @Published var polishEnabled: Bool = (UserDefaults.standard.object(forKey: "polishEnabled") as? Bool) ?? true {
         didSet { UserDefaults.standard.set(polishEnabled, forKey: "polishEnabled") }
     }
-    var agentEnabled = false
-    var volatileText = ""
-    var levelHistory: [Float] = []
-    var currentLevel: Float = 0
-    var modelStatus = "Checking speech model…"
-    var modelReady = false
-    var history: [DictationRecord] = []
+    @Published var agentEnabled = false
+    @Published var volatileText = ""
+    @Published var levelHistory: [Float] = []
+    @Published var currentLevel: Float = 0
+    @Published var modelStatus = "Checking speech model…"
+    @Published var modelReady = false
+    @Published var history: [DictationRecord] = []
     var usage = UsageStore.shared
 
     let permissions = PermissionsModel()

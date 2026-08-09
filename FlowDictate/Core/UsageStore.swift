@@ -3,20 +3,19 @@ import UserNotifications
 
 /// Tracks managed AI polish usage for free-tier caps and soft notifications.
 @MainActor
-@Observable
-final class UsageStore {
+final class UsageStore: ObservableObject {
     static let shared = UsageStore()
 
-    var wordsUsed: Int = 0
-    var wordsLimit: Int? = 2_000
-    var plan: String = "free"
-    var period: String = ""
-    var lastError: String?
-    var quotaExceeded: Bool = false
-    var lastFetched: Date?
+    @Published var wordsUsed: Int = 0
+    @Published var wordsLimit: Int? = 2_000
+    @Published var plan: String = "free"
+    @Published var period: String = ""
+    @Published var lastError: String?
+    @Published var quotaExceeded: Bool = false
+    @Published var lastFetched: Date?
     /// Premium Flow Read (managed TTS) characters this period.
-    var ttsCharsUsed: Int = 0
-    var ttsCharsLimit: Int? = nil
+    @Published var ttsCharsUsed: Int = 0
+    @Published var ttsCharsLimit: Int? = nil
 
     private static let usedKey = "usageWordsUsed"
     private static let limitKey = "usageWordsLimit"

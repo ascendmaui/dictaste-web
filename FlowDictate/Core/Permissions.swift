@@ -1,14 +1,12 @@
 import AppKit
 import AVFoundation
-import Observation
 
 @MainActor
-@Observable
-final class PermissionsModel {
-    var micGranted = false
-    var axGranted = false
+final class PermissionsModel: ObservableObject {
+    @Published var micGranted = false
+    @Published var axGranted = false
     /// True when the fn key is set to "Do Nothing" in System Settings › Keyboard.
-    var fnKeyFreed = false
+    @Published var fnKeyFreed = false
 
     /// Mic + Accessibility are required. fn key is optional (recommended for hold-fn).
     var requiredGranted: Bool { micGranted && axGranted }

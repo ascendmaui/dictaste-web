@@ -6,7 +6,7 @@ import SwiftUI
 @MainActor
 final class HUDController {
     private var panel: NSPanel?
-    private unowned let appState: AppState
+    private unowned var appState: AppState
 
     init(appState: AppState) {
         self.appState = appState
@@ -80,7 +80,7 @@ private let pillShape = RoundedRectangle(cornerRadius: 20, style: .continuous)
 private let miniPillShape = Capsule(style: .continuous)
 
 struct HUDView: View {
-    var appState: AppState
+    @ObservedObject var appState: AppState
 
     private var isExpanded: Bool {
         switch appState.phase {
@@ -436,7 +436,6 @@ struct HUDView: View {
                 Image(systemName: "sparkles")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white)
-                    .symbolEffect(.variableColor.iterative, isActive: true)
             }
         case .inserting:
             ZStack {
