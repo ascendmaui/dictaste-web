@@ -6,7 +6,7 @@ targets:
   FlowDictate:
     type: application
     platform: macOS
-    deploymentTarget: "26.0"
+    deploymentTarget: "14.0"
     sources:
       - path: FlowDictate
         excludes:
@@ -24,7 +24,10 @@ targets:
         INFOPLIST_FILE: FlowDictate/Info.plist
         GENERATE_INFOPLIST_FILE: NO
         SWIFT_VERSION: "5.0"
-        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        # Universal by default; CI/scripts can build ARCHS=arm64 or x86_64 alone.
+        ARCHS: "arm64 x86_64"
+        ONLY_ACTIVE_ARCH: NO
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: "Apple Development"
         DEVELOPMENT_TEAM: L85AF3V872

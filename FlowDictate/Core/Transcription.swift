@@ -7,6 +7,7 @@ enum DictationError: LocalizedError {
     case localeUnsupported
     case noAnalyzerFormat
     case timeout
+    case speechAuthDenied
 
     var errorDescription: String? {
         switch self {
@@ -15,115 +16,178 @@ enum DictationError: LocalizedError {
         case .localeUnsupported: return "English dictation isn't supported on this Mac"
         case .noAnalyzerFormat: return "Speech engine has no usable audio format"
         case .timeout: return "Timed out waiting for the transcript"
+        case .speechAuthDenied: return "Speech recognition permission denied"
         }
     }
 }
 
-/// One-time (per boot of the app) check that Apple's on-device speech model
-/// for English is downloaded and installed.
+/// One-time (per boot of the app) check that speech assets are ready.
 enum SpeechModel {
     static func ensureInstalled() async throws {
-        let locale = try await supportedEnglishLocale()
-        let transcriber = SpeechTranscriber(
-            locale: locale,
-            transcriptionOptions: [],
-            reportingOptions: [],
-            attributeOptions: []
-        )
-        if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
-            try await request.downloadAndInstall()
+        if #available(macOS 26.0, *) {
+            try await ModernSpeechSupport.ensureInstalled()
+            return
+        }
+        // Legacy SFSpeechRecognizer: request auth + warm locale
+        let status = await withCheckedContinuation { (cont: CheckedContinuation<SFSpeechRecognizerAuthorizationStatus, Never>) in
+            SFSpeechRecognizer.requestAuthorization { cont.resume(returning: $0) }
+        }
+        guard status == .authorized else { throw DictationError.speechAuthDenied }
+        guard SFSpeechRecognizer(locale: Locale(identifier: "en-US")) != nil
+                || SFSpeechRecognizer(locale: Locale(identifier: "en")) != nil else {
+            throw DictationError.localeUnsupported
         }
     }
 
     static func supportedEnglishLocale() async throws -> Locale {
-        let supported = await SpeechTranscriber.supportedLocales
-        if let exact = supported.first(where: { $0.identifier(.bcp47) == "en-US" }) {
-            return exact
+        if #available(macOS 26.0, *) {
+            return try await ModernSpeechSupport.supportedEnglishLocale()
         }
-        if let anyEnglish = supported.first(where: { $0.language.languageCode?.identifier == "en" }) {
-            return anyEnglish
-        }
-        throw DictationError.localeUnsupported
+        return Locale(identifier: "en-US")
     }
 }
 
-/// A single dictation: consumes mic (or file) buffers, streams volatile text
-/// while you speak, and returns the finalized transcript on finish().
+/// Unified session: modern SpeechAnalyzer on macOS 26+, SFSpeech on older.
 final class TranscriptionSession {
-    private let transcriber: SpeechTranscriber
-    private let analyzer: SpeechAnalyzer
-    private let inputContinuation: AsyncStream<AnalyzerInput>.Continuation
-    private let feedTask: Task<Void, Never>
-    private let resultsTask: Task<String, Error>
+    private let impl: any TranscriptionSessionImpl
 
     init(
         inputFormat: AVAudioFormat,
         buffers: AsyncStream<AVAudioPCMBuffer>,
         onVolatile: (@Sendable (String) -> Void)?
     ) async throws {
-        let locale = try await SpeechModel.supportedEnglishLocale()
-        let transcriber = SpeechTranscriber(
-            locale: locale,
-            transcriptionOptions: [],
-            reportingOptions: [.volatileResults],
-            attributeOptions: []
-        )
-        self.transcriber = transcriber
-        let analyzer = SpeechAnalyzer(modules: [transcriber])
-        self.analyzer = analyzer
-
-        guard let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber]) else {
-            throw DictationError.noAnalyzerFormat
+        if #available(macOS 26.0, *) {
+            impl = try await ModernTranscriptionSession(
+                inputFormat: inputFormat,
+                buffers: buffers,
+                onVolatile: onVolatile
+            )
+        } else {
+            impl = try await LegacyTranscriptionSession(
+                inputFormat: inputFormat,
+                buffers: buffers,
+                onVolatile: onVolatile
+            )
         }
-        let converter = AudioBufferConverter(from: inputFormat, to: analyzerFormat)
+    }
 
-        let (inputSequence, inputContinuation) = AsyncStream<AnalyzerInput>.makeStream()
-        self.inputContinuation = inputContinuation
+    func finish() async throws -> String { try await impl.finish() }
+    func cancel() { impl.cancel() }
+}
 
-        resultsTask = Task {
-            var finalText = ""
-            for try await result in transcriber.results {
-                let piece = String(result.text.characters)
-                if result.isFinal {
-                    finalText += piece
-                    onVolatile?(finalText)
-                } else {
-                    onVolatile?(finalText + piece)
-                }
+protocol TranscriptionSessionImpl: AnyObject {
+    func finish() async throws -> String
+    func cancel()
+}
+
+// MARK: - Legacy (macOS 14+)
+
+final class LegacyTranscriptionSession: TranscriptionSessionImpl {
+    private let request: SFSpeechAudioBufferRecognitionRequest
+    private var task: SFSpeechRecognitionTask?
+    private var feedTask: Task<Void, Never>?
+    private var finalText = ""
+    private var continuation: CheckedContinuation<String, Error>?
+    private let lock = NSLock()
+
+    init(
+        inputFormat: AVAudioFormat,
+        buffers: AsyncStream<AVAudioPCMBuffer>,
+        onVolatile: (@Sendable (String) -> Void)?
+    ) async throws {
+        let status = SFSpeechRecognizer.authorizationStatus()
+        if status != .authorized {
+            let granted = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+                SFSpeechRecognizer.requestAuthorization { cont.resume(returning: $0 == .authorized) }
             }
-            return finalText
+            guard granted else { throw DictationError.speechAuthDenied }
         }
 
-        feedTask = Task {
+        guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+                ?? SFSpeechRecognizer(locale: Locale(identifier: "en"))
+                ?? SFSpeechRecognizer() else {
+            throw DictationError.localeUnsupported
+        }
+
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        if recognizer.supportsOnDeviceRecognition {
+            request.requiresOnDeviceRecognition = true
+        }
+        self.request = request
+
+        let outFormat =
+            AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16_000, channels: 1, interleaved: false)
+            ?? inputFormat
+        let converter = AudioBufferConverter(from: inputFormat, to: outFormat)
+
+        // Capture box so recognitionTask can be started after full init if needed.
+        let lock = self.lock
+        self.task = recognizer.recognitionTask(with: request) { [weak self] result, error in
+            guard let self else { return }
+            if let result {
+                let text = result.bestTranscription.formattedString
+                onVolatile?(text)
+                if result.isFinal {
+                    lock.lock()
+                    self.finalText = text
+                    let cont = self.continuation
+                    self.continuation = nil
+                    lock.unlock()
+                    cont?.resume(returning: text)
+                }
+            } else if let error {
+                lock.lock()
+                let cont = self.continuation
+                self.continuation = nil
+                lock.unlock()
+                cont?.resume(throwing: error)
+            }
+        }
+
+        self.feedTask = Task {
             for await buffer in buffers {
                 guard !Task.isCancelled else { break }
                 if let converted = converter.convert(buffer) {
-                    inputContinuation.yield(AnalyzerInput(buffer: converted))
+                    request.append(converted)
+                } else {
+                    request.append(buffer)
                 }
             }
         }
-
-        try await analyzer.start(inputSequence: inputSequence)
     }
 
-    /// Call after the buffer stream has been finished (mic stopped / file read).
     func finish() async throws -> String {
-        await feedTask.value
-        inputContinuation.finish()
-        try await analyzer.finalizeAndFinishThroughEndOfInput()
-        return try await withTimeout(seconds: 15) { [resultsTask] in
-            try await resultsTask.value
+        await feedTask?.value
+        request.endAudio()
+        return try await withTimeout(seconds: 15) {
+            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<String, Error>) in
+                self.lock.lock()
+                if !self.finalText.isEmpty {
+                    let text = self.finalText
+                    self.lock.unlock()
+                    cont.resume(returning: text)
+                } else {
+                    self.continuation = cont
+                    self.lock.unlock()
+                }
+            }
         }
     }
 
     func cancel() {
-        feedTask.cancel()
-        inputContinuation.finish()
-        resultsTask.cancel()
-        let analyzer = self.analyzer
-        Task { await analyzer.cancelAndFinishNow() }
+        feedTask?.cancel()
+        task?.cancel()
+        request.endAudio()
+        lock.lock()
+        let cont = continuation
+        continuation = nil
+        lock.unlock()
+        cont?.resume(throwing: CancellationError())
     }
 }
+
+// MARK: - Shared helpers
 
 /// Converts mic/file buffers to the analyzer's preferred format (rate + sample type).
 final class AudioBufferConverter {
