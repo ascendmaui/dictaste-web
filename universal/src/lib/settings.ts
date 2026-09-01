@@ -15,6 +15,7 @@ export interface DictasteSettings {
   xaiModel: string;
   nvidiaApiKey: string;
   nvidiaModel: string;
+  nvidiaDemoApiBaseUrl: string;
   rememberKeys: boolean;
   autoPolish: boolean;
 }
@@ -34,6 +35,7 @@ export const defaultSettings: DictasteSettings = {
   xaiModel: "grok-4.6",
   nvidiaApiKey: "",
   nvidiaModel: "nvidia/llama-3.3-nemotron-super-49b-v1.5",
+  nvidiaDemoApiBaseUrl: "https://dictaste.com",
   rememberKeys: false,
   autoPolish: false
 };

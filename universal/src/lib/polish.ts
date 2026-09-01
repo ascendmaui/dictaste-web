@@ -125,7 +125,7 @@ async function polishWithXAI(text: string, settings: DictasteSettings): Promise<
 
 async function polishWithNVIDIA(text: string, settings: DictasteSettings): Promise<string> {
   const apiKey = settings.nvidiaApiKey.trim();
-  if (!apiKey) throw new Error("Add your NVIDIA API key in Settings.");
+  if (!apiKey) return polishWithNVIDIADemo(text, settings);
 
   const response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
     method: "POST",
@@ -148,6 +148,21 @@ async function polishWithNVIDIA(text: string, settings: DictasteSettings): Promi
 
   const payload = (await response.json()) as ChatCompletionPayload;
   return validateResult(parseChatCompletion(payload), text);
+}
+
+async function polishWithNVIDIADemo(text: string, settings: DictasteSettings): Promise<string> {
+  const response = await fetch(`${normalizeApiBase(settings.nvidiaDemoApiBaseUrl)}/api/demo/nvidia-polish`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ text })
+  });
+
+  if (!response.ok) throw new Error(await providerError(response, "NVIDIA demo"));
+
+  const payload = (await response.json()) as { text?: string };
+  return validateResult(payload.text, text);
 }
 
 interface GeminiInteraction {

@@ -9,6 +9,7 @@ Last updated: 2026-09-01
 - Native macOS source was recovered from `/Users/john/dictaste-mac`.
 - A new universal client was created for iOS, Android, browser, Chrome, and installable PWA use.
 - The universal app supports local cleanup, Dictaste Cloud, Google Gemini, ChatGPT API, xAI Grok, and NVIDIA LLM providers.
+- NVIDIA also has a server-side demo endpoint for the free version, using `NVIDIA_API_KEY` from hosting environment variables.
 - No API keys, license keys, signing secrets, or Vercel secret values are committed.
 
 ## Recovered source
@@ -22,7 +23,8 @@ Last updated: 2026-09-01
 - The suspended GitHub account blocks access to the old private web source repository.
 - The old Windows source was not found locally during recovery.
 - The existing notarized macOS installer is preserved as an artifact, but new notarization requires Apple account access.
-- Live OpenAI/xAI/NVIDIA/Gemini smoke tests require John to paste or save provider API keys.
+- Live OpenAI/xAI/Gemini smoke tests require John to paste or save provider API keys.
+- The NVIDIA key pasted into chat should be rotated after the demo because chat is not an ideal permanent secret vault.
 
 ## Verified builds
 
@@ -31,4 +33,3 @@ Last updated: 2026-09-01
 - iOS simulator build: passed.
 - Android debug APK build: passed.
 - Existing notarized macOS app: preserved and installed at `/Applications/Dictaste.app`.
-

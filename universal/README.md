@@ -8,6 +8,7 @@ One shared client for:
 - Google Gemini polish through the current Gemini Interactions API.
 - ChatGPT API and xAI Grok polish through their Responses APIs.
 - NVIDIA LLM polish through hosted NVIDIA NIM chat completions.
+- NVIDIA demo polish through a server-side `/api/demo/nvidia-polish` endpoint when the user has not entered their own key.
 - The existing Dictaste managed-polish API.
 
 ## Run locally
@@ -39,3 +40,5 @@ Apple signing and Google Play signing stay outside source control. Store credent
 ## Keys
 
 The app contains no API keys. Users can select private local cleanup, provide a Dictaste license, or provide their own Gemini, OpenAI, xAI, or NVIDIA key. Key persistence is opt-in and remains device-local.
+
+For the free/demo NVIDIA path, set `NVIDIA_API_KEY` on the hosting provider. Keep it server-side only. Do not put demo keys into React, Vite, Capacitor, iOS, or Android source.

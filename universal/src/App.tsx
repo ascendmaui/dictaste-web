@@ -351,7 +351,11 @@ function SettingsDialog({ initial, onClose, onSave }: { initial: DictasteSetting
               NVIDIA model
               <input value={draft.nvidiaModel} onChange={(event) => setDraft({ ...draft, nvidiaModel: event.target.value })} />
             </label>
-            <p className="field-help">Uses NVIDIA’s hosted NIM chat endpoint. Pick any supported text model from NVIDIA Build.</p>
+            <label>
+              Demo service address
+              <input value={draft.nvidiaDemoApiBaseUrl} onChange={(event) => setDraft({ ...draft, nvidiaDemoApiBaseUrl: event.target.value })} />
+            </label>
+            <p className="field-help">Uses your key when present. Without one, Dictaste calls the demo service so the free version can still polish text.</p>
           </>
         )}
 
