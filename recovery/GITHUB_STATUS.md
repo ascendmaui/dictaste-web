@@ -10,19 +10,17 @@ Last updated: 2026-09-01
 
 ## What is online
 
-The connected GitHub app created an import branch and pull request with a recovery handoff file. That file records the recovered local repo path, bundle checksums, and verified Google Drive backup paths.
+The full recovered source has been pushed to GitHub:
 
-## Remaining local Git step
+- Full source branch: `full-recovered-source-2026-09-01`
+- Full source branch URL: `https://github.com/ascendmaui/dictaste-web/tree/full-recovered-source-2026-09-01`
 
-The Mac command-line Git credential still uses the suspended `johnmatveyev-lab` account, so direct `git push` is blocked until `gh` is reauthenticated as `ascendmaui`.
+The connected GitHub app also created PR 1 with a recovery handoff file:
 
-After local GitHub login is fixed, run:
+- Recovery handoff PR: `https://github.com/ascendmaui/dictaste-web/pull/1`
 
-```bash
-cd /Users/john/Documents/Codex/2026-08-31/referenced-chatgpt-conversation-this-is-an/outputs/Dictaste-Recovered
-git remote set-url origin https://github.com/ascendmaui/dictaste-web.git
-git push -u origin main:dictaste-recovered-2026-09-01
-```
+## Pull request note
 
-Then merge or replace PR 1 with the full recovered source branch.
+The recovered source branch preserves the local recovery history, including the imported native Mac app history. Because the new GitHub repository started with a placeholder commit, GitHub cannot directly open a pull request from that unrelated history branch into `main`.
 
+For review in GitHub's normal pull request UI, create a mirror branch from `main`, copy the recovered source into it, and open that branch as the merge request. Keep `full-recovered-source-2026-09-01` as the history-preserving backup branch.
