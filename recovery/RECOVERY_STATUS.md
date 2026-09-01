@@ -10,6 +10,7 @@ Last updated: 2026-09-01
 - A new universal client was created for iOS, Android, browser, Chrome, and installable PWA use.
 - The universal app supports local cleanup, Dictaste Cloud, Google Gemini, ChatGPT API, xAI Grok, and NVIDIA LLM providers.
 - NVIDIA also has a server-side demo endpoint for the free version, using `NVIDIA_API_KEY` from hosting environment variables.
+- GitHub is connected as `ascendmaui`; recovery PR 1 is open at `https://github.com/ascendmaui/dictaste-web/pull/1`.
 - No API keys, license keys, signing secrets, or Vercel secret values are committed.
 
 ## Recovered source
