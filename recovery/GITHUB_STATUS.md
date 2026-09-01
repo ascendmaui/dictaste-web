@@ -19,8 +19,13 @@ The connected GitHub app also created PR 1 with a recovery handoff file:
 
 - Recovery handoff PR: `https://github.com/ascendmaui/dictaste-web/pull/1`
 
+For normal GitHub review and merge, a mirror branch was created from the repository's `main` branch:
+
+- Review branch: `recovered-source-review-2026-09-01`
+- Review pull request: `https://github.com/ascendmaui/dictaste-web/pull/2`
+
 ## Pull request note
 
 The recovered source branch preserves the local recovery history, including the imported native Mac app history. Because the new GitHub repository started with a placeholder commit, GitHub cannot directly open a pull request from that unrelated history branch into `main`.
 
-For review in GitHub's normal pull request UI, create a mirror branch from `main`, copy the recovered source into it, and open that branch as the merge request. Keep `full-recovered-source-2026-09-01` as the history-preserving backup branch.
+Keep `full-recovered-source-2026-09-01` as the history-preserving backup branch.
