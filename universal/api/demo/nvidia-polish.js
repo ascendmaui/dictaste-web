@@ -9,13 +9,41 @@ Rules:
 - Return only the cleaned text with no preamble or label.`;
 
 const defaultModel = "nvidia/llama-3.3-nemotron-super-49b-v1.5";
+const maxBodyBytes = 12_000;
 const maxTextLength = 8000;
 const upstreamTimeoutMs = 20_000;
+const allowedOrigins = new Set([
+  "https://dictaste.com",
+  "https://www.dictaste.com",
+  "http://127.0.0.1:4173",
+  "http://localhost:4173",
+  "capacitor://localhost",
+  "ionic://localhost",
+  "https://localhost"
+]);
 
 export default async function handler(request, response) {
+  applySafeHeaders(request, response);
+
+  if (request.method === "OPTIONS") {
+    response.status(204).end();
+    return;
+  }
+
   if (request.method !== "POST") {
     response.setHeader("Allow", "POST");
     response.status(405).json({ error: "Method not allowed." });
+    return;
+  }
+
+  if (isOversized(request)) {
+    response.status(413).json({ error: "Request is too large." });
+    return;
+  }
+
+  const contentType = headerValue(request, "content-type");
+  if (contentType && !contentType.toLowerCase().includes("application/json")) {
+    response.status(415).json({ error: "Content-Type must be application/json." });
     return;
   }
 
@@ -111,4 +139,32 @@ function polishFromPayload(payload) {
     .map((part) => part.text || "")
     .join("")
     .trim();
+}
+
+function applySafeHeaders(request, response) {
+  const origin = headerValue(request, "origin");
+  if (origin && allowedOrigins.has(origin)) {
+    response.setHeader("Access-Control-Allow-Origin", origin);
+    response.setHeader("Vary", "Origin");
+  }
+  response.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  response.setHeader("Access-Control-Max-Age", "600");
+  response.setHeader("X-Content-Type-Options", "nosniff");
+  response.setHeader("Referrer-Policy", "no-referrer");
+  response.setHeader("Cache-Control", "no-store");
+  response.setHeader("X-Frame-Options", "DENY");
+}
+
+function isOversized(request) {
+  const declared = Number(headerValue(request, "content-length"));
+  if (Number.isFinite(declared) && declared > maxBodyBytes) return true;
+  return typeof request.body === "string" && request.body.length > maxBodyBytes;
+}
+
+function headerValue(request, name) {
+  const headers = request.headers ?? {};
+  const value = headers[name] ?? headers[name.toLowerCase()];
+  if (Array.isArray(value)) return value[0] ?? "";
+  return typeof value === "string" ? value : "";
 }
