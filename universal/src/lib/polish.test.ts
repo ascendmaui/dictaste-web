@@ -72,4 +72,55 @@ describe("polishText", () => {
       method: "POST"
     }));
   });
+
+  it("does not surface upstream error bodies", async () => {
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+      error: { message: "upstream secret token sk-live-should-not-leak" }
+    }), { status: 500 })) as typeof fetch;
+
+    await expect(polishText("um clean text", {
+      ...defaultSettings,
+      provider: "openai",
+      openaiApiKey: "test-openai-key"
+    })).rejects.toThrow("OpenAI could not polish that text (500).");
+  });
+
+  it("reports a timeout without the abort reason", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      const error = new Error("The operation was aborted.");
+      error.name = "AbortError";
+      throw error;
+    }) as typeof fetch;
+
+    await expect(polishText("um clean text", {
+      ...defaultSettings,
+      provider: "gemini",
+      geminiApiKey: "test-gemini-key"
+    })).rejects.toThrow("The polish request timed out. Try again.");
+  });
+
+  it("reports network failures without the raw client error", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      throw new TypeError("Failed to fetch: internal resolver detail");
+    }) as typeof fetch;
+
+    await expect(polishText("um clean text", {
+      ...defaultSettings,
+      provider: "xai",
+      xaiApiKey: "test-xai-key"
+    })).rejects.toThrow("Could not reach the polish service. Check your connection and try again.");
+  });
+
+  it("rejects an unreadable success payload", async () => {
+    globalThis.fetch = vi.fn(async () => new Response("not-json", {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    })) as typeof fetch;
+
+    await expect(polishText("um clean text", {
+      ...defaultSettings,
+      provider: "nvidia",
+      nvidiaApiKey: "test-nvidia-key"
+    })).rejects.toThrow("The polish service returned an unreadable response.");
+  });
 });
