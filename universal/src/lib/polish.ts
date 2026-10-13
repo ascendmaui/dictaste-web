@@ -3,7 +3,7 @@ import { normalizeApiBase } from "./settings";
 
 const POLISH_TIMEOUT_MS = 20_000;
 
-export const polishInstructions = `You are a dictation editor. Turn the raw voice transcript into clean, well-organized written text.
+const polishInstructions = `You are a dictation editor. Turn the raw voice transcript into clean, well-organized written text.
 
 Rules:
 - Fix grammar, punctuation, and capitalization.

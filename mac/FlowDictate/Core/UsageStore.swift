@@ -41,11 +41,6 @@ final class UsageStore: ObservableObject {
         return min(1, Double(wordsUsed) / Double(limit))
     }
 
-    var remaining: Int? {
-        guard let limit = wordsLimit else { return nil }
-        return max(0, limit - wordsUsed)
-    }
-
     var meterLabel: String {
         if plan == "dev" {
             return "Developer · unlimited BYO"

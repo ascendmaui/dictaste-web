@@ -129,7 +129,6 @@ final class AppState: ObservableObject {
         pollTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
-                let axBefore = self.permissions.axGranted
                 self.permissions.refresh()
                 if self.permissions.axGranted {
                     self.hotkey.ensureHealthy()
