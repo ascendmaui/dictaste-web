@@ -1,6 +1,8 @@
 import type { DictasteSettings } from "./settings";
 import { normalizeApiBase } from "./settings";
 
+const POLISH_TIMEOUT_MS = 20_000;
+
 const polishInstructions = `You are a dictation editor. Turn the raw voice transcript into clean, well-organized written text.
 
 Rules:
@@ -35,7 +37,7 @@ async function polishWithDictaste(text: string, settings: DictasteSettings): Pro
   const licenseKey = settings.licenseKey.trim();
   if (!licenseKey) throw new Error("Add your Dictaste license key in Settings.");
 
-  const response = await fetch(`${normalizeApiBase(settings.apiBaseUrl)}/api/v1/polish`, {
+  const response = await fetchPolish(`${normalizeApiBase(settings.apiBaseUrl)}/api/v1/polish`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${licenseKey}`,
@@ -45,9 +47,9 @@ async function polishWithDictaste(text: string, settings: DictasteSettings): Pro
   });
 
   if (response.status === 402) throw new Error("Your Dictaste polish allowance is used up.");
-  if (!response.ok) throw new Error(`Dictaste Cloud returned ${response.status}.`);
+  if (!response.ok) throw new Error(await providerError(response, "Dictaste Cloud"));
 
-  const payload = (await response.json()) as { text?: string };
+  const payload = (await readJson(response)) as { text?: string };
   return validateResult(payload.text, text);
 }
 
@@ -55,7 +57,7 @@ async function polishWithGemini(text: string, settings: DictasteSettings): Promi
   const apiKey = settings.geminiApiKey.trim();
   if (!apiKey) throw new Error("Add your Gemini API key in Settings.");
 
-  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+  const response = await fetchPolish("https://generativelanguage.googleapis.com/v1beta/interactions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -68,12 +70,9 @@ async function polishWithGemini(text: string, settings: DictasteSettings): Promi
     })
   });
 
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
-    throw new Error(payload?.error?.message || `Gemini returned ${response.status}.`);
-  }
+  if (!response.ok) throw new Error(await providerError(response, "Gemini"));
 
-  const payload = (await response.json()) as GeminiInteraction;
+  const payload = (await readJson(response)) as GeminiInteraction;
   return validateResult(parseGeminiInteraction(payload), text);
 }
 
@@ -81,7 +80,7 @@ async function polishWithOpenAI(text: string, settings: DictasteSettings): Promi
   const apiKey = settings.openaiApiKey.trim();
   if (!apiKey) throw new Error("Add your OpenAI API key in Settings.");
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await fetchPolish("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -96,7 +95,7 @@ async function polishWithOpenAI(text: string, settings: DictasteSettings): Promi
 
   if (!response.ok) throw new Error(await providerError(response, "OpenAI"));
 
-  const payload = (await response.json()) as ResponsesPayload;
+  const payload = (await readJson(response)) as ResponsesPayload;
   return validateResult(parseResponsesPayload(payload), text);
 }
 
@@ -104,7 +103,7 @@ async function polishWithXAI(text: string, settings: DictasteSettings): Promise<
   const apiKey = settings.xaiApiKey.trim();
   if (!apiKey) throw new Error("Add your xAI API key in Settings.");
 
-  const response = await fetch("https://api.x.ai/v1/responses", {
+  const response = await fetchPolish("https://api.x.ai/v1/responses", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -119,7 +118,7 @@ async function polishWithXAI(text: string, settings: DictasteSettings): Promise<
 
   if (!response.ok) throw new Error(await providerError(response, "xAI"));
 
-  const payload = (await response.json()) as ResponsesPayload;
+  const payload = (await readJson(response)) as ResponsesPayload;
   return validateResult(parseResponsesPayload(payload), text);
 }
 
@@ -127,7 +126,7 @@ async function polishWithNVIDIA(text: string, settings: DictasteSettings): Promi
   const apiKey = settings.nvidiaApiKey.trim();
   if (!apiKey) return polishWithNVIDIADemo(text, settings);
 
-  const response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+  const response = await fetchPolish("https://integrate.api.nvidia.com/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -146,12 +145,12 @@ async function polishWithNVIDIA(text: string, settings: DictasteSettings): Promi
 
   if (!response.ok) throw new Error(await providerError(response, "NVIDIA"));
 
-  const payload = (await response.json()) as ChatCompletionPayload;
+  const payload = (await readJson(response)) as ChatCompletionPayload;
   return validateResult(parseChatCompletion(payload), text);
 }
 
 async function polishWithNVIDIADemo(text: string, settings: DictasteSettings): Promise<string> {
-  const response = await fetch(`${normalizeApiBase(settings.nvidiaDemoApiBaseUrl)}/api/demo/nvidia-polish`, {
+  const response = await fetchPolish(`${normalizeApiBase(settings.nvidiaDemoApiBaseUrl)}/api/demo/nvidia-polish`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -161,7 +160,7 @@ async function polishWithNVIDIADemo(text: string, settings: DictasteSettings): P
 
   if (!response.ok) throw new Error(await providerError(response, "NVIDIA demo"));
 
-  const payload = (await response.json()) as { text?: string };
+  const payload = (await readJson(response)) as { text?: string };
   return validateResult(payload.text, text);
 }
 
@@ -233,10 +232,38 @@ export function localCleanup(text: string): string {
   return cleaned;
 }
 
+async function fetchPolish(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), POLISH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (isAbortError(error)) throw new Error("The polish request timed out. Try again.");
+    throw new Error("Could not reach the polish service. Check your connection and try again.");
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+async function readJson(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    throw new Error("The polish service returned an unreadable response.");
+  }
+}
+
 async function providerError(response: Response, provider: string): Promise<string> {
-  const payload = (await response.json().catch(() => null)) as { error?: { message?: string } | string } | null;
-  const detail = typeof payload?.error === "string" ? payload.error : payload?.error?.message;
-  return detail || `${provider} returned ${response.status}.`;
+  await response.body?.cancel().catch(() => undefined);
+  if (response.status === 401 || response.status === 403) {
+    return `${provider} rejected the request. Check the key in Settings.`;
+  }
+  if (response.status === 429) return `${provider} is busy right now. Try again in a moment.`;
+  return `${provider} could not polish that text (${response.status}).`;
 }
 
 function validateResult(result: string | undefined, original: string): string {
