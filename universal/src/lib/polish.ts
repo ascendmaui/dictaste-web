@@ -1,7 +1,7 @@
 import type { DictasteSettings } from "./settings";
 import { normalizeApiBase } from "./settings";
 
-export const polishInstructions = `You are a dictation editor. Turn the raw voice transcript into clean, well-organized written text.
+const polishInstructions = `You are a dictation editor. Turn the raw voice transcript into clean, well-organized written text.
 
 Rules:
 - Fix grammar, punctuation, and capitalization.

@@ -73,15 +73,4 @@ final class PermissionsModel: ObservableObject {
             NSWorkspace.shared.open(url)
         }
     }
-
-    /// Soft-set fn usage to Do Nothing when the user opts in from onboarding.
-    func setFnKeyToDoNothing() {
-        if let defaults = UserDefaults(suiteName: "com.apple.HIToolbox") {
-            defaults.set(0, forKey: "AppleFnUsageType")
-            defaults.synchronize()
-        }
-        refresh()
-        // Still open Settings so user can confirm (HIToolbox writes can be ignored on some OS versions)
-        openKeyboardSettings()
-    }
 }

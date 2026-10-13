@@ -79,14 +79,12 @@ enum CloudPolisher {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse else { return nil }
             if http.statusCode == 402 {
-                NSLog("Dictaste: polish quota exceeded")
                 Task { @MainActor in
                     UsageStore.shared.markQuotaExceeded()
                 }
                 return nil
             }
             guard (200...299).contains(http.statusCode) else {
-                NSLog("Dictaste: managed polish HTTP \(http.statusCode)")
                 return nil
             }
             guard
@@ -109,7 +107,6 @@ enum CloudPolisher {
             }
             return sanity(polished, original: text)
         } catch {
-            NSLog("Dictaste: managed polish error \(error.localizedDescription)")
             return nil
         }
     }
@@ -133,7 +130,6 @@ enum CloudPolisher {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-                NSLog("Dictaste: OpenAI polish failed")
                 return nil
             }
             guard
@@ -144,7 +140,6 @@ enum CloudPolisher {
             else { return nil }
             return sanity(stripPreamble(content.trimmingCharacters(in: .whitespacesAndNewlines)), original: text)
         } catch {
-            NSLog("Dictaste: OpenAI polish error \(error.localizedDescription)")
             return nil
         }
     }

@@ -75,7 +75,6 @@ final class AppleIntelligencePolisherBackend: TextPolisherBackend {
             guard !polished.isEmpty, polished.count < text.count * 5 + 400 else { return nil }
             return polished
         } catch {
-            NSLog("Polish failed, falling back to basic cleanup: \(error)")
             return nil
         }
     }

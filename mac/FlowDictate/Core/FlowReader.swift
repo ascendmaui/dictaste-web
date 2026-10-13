@@ -109,25 +109,6 @@ final class FlowReader: NSObject, ObservableObject, AVSpeechSynthesizerDelegate 
             .sorted { $0.name < $1.name }
     }
 
-    var voicesForCurrentProvider: [String] {
-        switch provider {
-        case .system: return systemVoices.map(\.name)
-        case .openai: return Self.openAIVoices
-        case .gemini: return Self.geminiVoices
-        case .grok:
-            let cloned = VoiceCloneService.loadLocal().map(\.id)
-            return Self.grokVoices + cloned
-        }
-    }
-
-    /// Display label for a Grok built-in or cloned voice_id.
-    func grokVoiceLabel(_ id: String) -> String {
-        if let c = VoiceCloneService.loadLocal().first(where: { $0.id == id }) {
-            return c.displayName
-        }
-        return id.capitalized
-    }
-
     // MARK: - API keys (shared prefs)
 
     static var openAIKey: String {
