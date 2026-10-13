@@ -3,7 +3,7 @@
 Native menu bar app — system-wide dictation + highlight-to-speak.
 
 **Product site:** https://dictaste.vercel.app  
-**Developer free plan:** star https://github.com/johnmatveyev-lab/dictaste then unlock at https://dictaste.vercel.app/developers/setup  
+**Developer free plan:** star https://github.com/ascendmaui/dictaste then unlock at https://dictaste.vercel.app/developers/setup  
 
 ## Install (developers)
 

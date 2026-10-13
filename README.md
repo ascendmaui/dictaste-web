@@ -2,11 +2,11 @@
 
 This is the clean recovery and forward-development repository for Dictaste.
 
-## What is preserved
+## What is in this repository
 
-- `mac/` — the complete native SwiftUI macOS source and its Git history.
-- `universal/` — one new client for iPhone, Android/Google, installable Chrome/PWA, and browser use.
-- `recovery/` — deployment inventory, checksums, and restore instructions. No secret values are committed.
+- `mac/` — native Swift macOS app (SwiftUI menu-bar dictation and highlight-to-speak).
+- `universal/` — Vite, React, and Capacitor client for iPhone, Android, an installable PWA, and the browser.
+- `recovery/` — notes on restore steps, GitHub status, and the deployment inventory. No secret values are committed.
 
 The existing production website at `https://dictaste.com` is intentionally not deployed from this repository yet. Its live Vercel deployment remains untouched while the unavailable private GitHub source is recovered or replaced.
 
